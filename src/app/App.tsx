@@ -1,18 +1,8 @@
-import { useState } from 'react'
-
-
-
-import { HomeScreen } from '@screens/homeScreen'
-
-import './App.css'
+import { HomeScreen } from '@screens';
+import './App.css';
 
 function App() {
-
-  return (
-    <>
-      <HomeScreen />
-    </>
-  )
+    return <HomeScreen />;
 }
 
-export default App
+export default App;

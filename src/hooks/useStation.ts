@@ -1,63 +1,93 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { stationApi } from '@services/stationApi';
-import { StatusGameStation } from '@types/statusGameStation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    connectControl,
+    getHealth,
+    launch as launchStation,
+    newSessionId,
+    prepare as prepareStation,
+    stationErrorMessage,
+    stop as stopStation,
+} from '@services';
+import { attachWebrtc } from '@/webrtc/session.ts';
+import { StatusGameStation } from '@/types';
 
-const STATION_URL = import.meta.env.VITE_STATION_URL || 'http://localhost:8090';
-const WS_CONTROL_URL = STATION_URL.replace(/^http/, 'ws') + '/ws/control';
+const MAX_LOGS = 80;
 
 export const useStation = () => {
     const [status, setStatus] = useState<StatusGameStation>(StatusGameStation.IDLE);
-    const [progress, setProgress] = useState<number>(0);
-    const [loading, setLoading] = useState<boolean>(false);
+    const [progress, setProgress] = useState(0);
+    const [connected, setConnected] = useState(false);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [logs, setLogs] = useState<string[]>([]);
+    const [hasTrack, setHasTrack] = useState(false);
+    const [sessionId, setSessionId] = useState(newSessionId);
 
-    const [sessionId, setSessionId] = useState<string>(() => crypto.randomUUID());
-    const wsRef = useRef<WebSocket | null>(null);
+    const videoRef = useRef<HTMLVideoElement | null>(null);
+    const peerCleanupRef = useRef<(() => void) | null>(null);
 
-    const fetchStatus = useCallback(async () => {
-        try {
-            const data = await stationApi.getHealth();
-            if (data.state) setStatus(data.state as StatusGameStation);
-        } catch {
-            setStatus(StatusGameStation.FAILED);
-            setError('Estación offline');
-        }
+    const appendLog = useCallback((line: string) => {
+        const stamp = new Date().toLocaleTimeString();
+        setLogs((prev) => [...prev.slice(-(MAX_LOGS - 1)), `${stamp}  ${line}`]);
+    }, []);
+
+    const closePeer = useCallback(() => {
+        peerCleanupRef.current?.();
+        peerCleanupRef.current = null;
+        const video = videoRef.current;
+        if (video) video.srcObject = null;
+        setHasTrack(false);
     }, []);
 
     useEffect(() => {
-        fetchStatus();
+        void getHealth()
+            .then((data) => {
+                if (data.state) setStatus(data.state);
+                appendLog(`health ${data.state}`);
+            })
+            .catch(() => {
+                setStatus(StatusGameStation.FAILED);
+                setError('Estación offline');
+                appendLog('health failed');
+            });
 
-        const ws = new WebSocket(WS_CONTROL_URL);
-        wsRef.current = ws;
-
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.type === 'STATE') {
-                    if (data.state) setStatus(data.state as StatusGameStation);
-                    if (typeof data.progress === 'number') setProgress(data.progress);
+        const disconnect = connectControl(
+            (ev) => {
+                if (ev.type === 'STATE') {
+                    if (ev.state) setStatus(ev.state);
+                    if (typeof ev.progress === 'number') setProgress(ev.progress);
                     setError(null);
-                } else if (data.type === 'ERROR') {
-                    setStatus(StatusGameStation.FAILED);
-                    setError(data.message || 'Error en la estación');
+                    appendLog(`STATE ${ev.state ?? ''} ${ev.progress ?? ''}`.trim());
+                    return;
                 }
-            } catch (err) {
-                console.error('Error parseando evento WS:', err);
-            }
+                if (ev.type === 'ERROR') {
+                    setStatus(StatusGameStation.FAILED);
+                    setError(ev.message || 'Error en la estación');
+                    appendLog(`ERROR ${ev.code ?? ev.message ?? ''}`);
+                }
+            },
+            (open) => {
+                setConnected(open);
+                appendLog(open ? 'ws control open' : 'ws control closed');
+            },
+        );
+
+        return () => {
+            closePeer();
+            disconnect();
         };
-
-        ws.onerror = () => setError('Error de conexión con la estación');
-
-        return () => ws.close();
-    }, [fetchStatus]);
+    }, [appendLog, closePeer]);
 
     const prepare = async () => {
         setLoading(true);
         setError(null);
         try {
-            await stationApi.prepare(sessionId);
-        } catch (err: any) {
-            setError(err.message);
+            await prepareStation(sessionId);
+            appendLog('prepare 202');
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Error al preparar';
+            setError(message);
+            appendLog(`prepare error ${message}`);
         } finally {
             setLoading(false);
         }
@@ -67,9 +97,23 @@ export const useStation = () => {
         setLoading(true);
         setError(null);
         try {
-            await stationApi.launch(sessionId);
-        } catch (err: any) {
-            setError(err.message);
+            const launched = await launchStation(sessionId);
+            appendLog('launch 200');
+            const video = videoRef.current;
+            if (!video) throw new Error('No hay elemento de video');
+            closePeer();
+            peerCleanupRef.current = attachWebrtc({
+                signalPath: launched.wsUrl || '/ws/webrtc',
+                video,
+                onTrack: (stream) => setHasTrack(Boolean(stream)),
+                onLog: appendLog,
+                onError: (code) => setError(stationErrorMessage(code)),
+            });
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Error al lanzar';
+            setError(message);
+            appendLog(`launch error ${message}`);
+            closePeer();
         } finally {
             setLoading(false);
         }
@@ -77,11 +121,16 @@ export const useStation = () => {
 
     const stop = async () => {
         setLoading(true);
+        setError(null);
+        closePeer();
         try {
-            await stationApi.stop(sessionId);
-            setSessionId(crypto.randomUUID());
-        } catch (err: any) {
-            console.error('Error deteniendo sesión:', err);
+            await stopStation(sessionId);
+            appendLog('stop 204');
+            setSessionId(newSessionId());
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Error al detener';
+            setError(message);
+            appendLog(`stop error ${message}`);
         } finally {
             setLoading(false);
         }
@@ -90,11 +139,14 @@ export const useStation = () => {
     return {
         status,
         progress,
+        connected,
         loading,
         error,
+        logs,
+        hasTrack,
+        videoRef,
         prepare,
         launch,
         stop,
-        refresh: fetchStatus,
     };
 };

@@ -1,3 +1,3 @@
 export * from './api/station.ts';
-export * from './interfaces/httpMethods.ts';
-export * from './interfaces/statusGameStation.ts';
+export * from './api/urls.ts';
+export * from './ws/control.ts';
