@@ -12,9 +12,13 @@ ENV VITE_ICE_SERVERS=$VITE_ICE_SERVERS
 RUN npm run build
 
 FROM nginx:1.27-alpine
+RUN apk add --no-cache openssl
 COPY nginx.conf /etc/nginx/templates/default.conf.template
+COPY docker/16-selfsigned-certs.sh /docker-entrypoint.d/16-selfsigned-certs.sh
+RUN chmod +x /docker-entrypoint.d/16-selfsigned-certs.sh
 COPY --from=build /app/dist /usr/share/nginx/html
 ENV NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx/conf.d
 ENV NGINX_ENVSUBST_FILTER=STATION_UPSTREAM
 ENV STATION_UPSTREAM=http://127.0.0.1:8090
-EXPOSE 5173
+ENV PUBLIC_HOST=localhost
+EXPOSE 5173 443
