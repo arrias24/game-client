@@ -13,6 +13,7 @@ export const HomeScreen = () => {
         logs,
         hasTrack,
         padId,
+        rtcStats,
         videoRef,
         prepare,
         launch,
@@ -41,6 +42,7 @@ export const HomeScreen = () => {
                             videoRef={videoRef}
                             hasTrack={hasTrack}
                             padId={padId}
+                            stats={rtcStats}
                             banner={connected && status === StatusGameStation.PREPARING
                                 ? <ProgressBar progress={progress} />
                                 : null}

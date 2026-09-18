@@ -168,6 +168,25 @@
     background: rgba(15, 23, 42, 0.92);
 }
 
+.rtc-stats {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    left: auto;
+    z-index: 3;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(8, 8, 14, 0.72);
+    color: #cbd5e1;
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+}
+
 .game-view.is-controls .game-view__hint {
     opacity: 1;
 }

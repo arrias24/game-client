@@ -9,6 +9,9 @@ const ERROR_UI: Record<string, string> = {
     PREPARE_IN_PROGRESS: 'La estación ya está ocupada.',
     PEER_BUSY: 'Ya hay un peer en esta estación.',
     NOT_PLAYING: 'La estación no está en partida.',
+    CHECKSUM_MISMATCH: 'El juego en cache no coincide. Volvé a preparar.',
+    SOURCE_NOT_FOUND: 'No está el artefacto en la library de la estación.',
+    UNSUPPORTED_SOURCE: 'Ese tipo de source no está en este corte.',
 };
 
 export function stationErrorMessage(code: string) {
@@ -67,7 +70,7 @@ export async function prepare(sessionId: string): Promise<PrepareResponse> {
             version: '1.0.0',
             source: {
                 type: 'local',
-                path: '/library/test-pattern/1.0.0',
+                path: `/library/${GAME_ID}/1.0.0`,
                 checksum: 'sha256:00',
             },
         }),

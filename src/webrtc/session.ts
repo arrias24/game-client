@@ -1,6 +1,7 @@
 import { wsUrl } from '@services/api/urls.ts';
 import { attachGamepad } from '@/webrtc/gamepad.ts';
 import { createPeer, type SignalIn } from '@/webrtc/peer.ts';
+import { readRtcStats, type RtcStatsSnapshot } from '@/webrtc/stats.ts';
 
 export function attachWebrtc(opts: {
     signalPath: string;
@@ -9,6 +10,7 @@ export function attachWebrtc(opts: {
     onLog: (line: string) => void;
     onError: (code: string) => void;
     onPad?: (id: string | null) => void;
+    onStats?: (stats: RtcStatsSnapshot) => void;
 }) {
     const ws = new WebSocket(wsUrl(opts.signalPath));
     let detachPad: (() => void) | null = null;
@@ -57,6 +59,14 @@ export function attachWebrtc(opts: {
     });
 
     peer.input.binaryType = 'arraybuffer';
+    let prevStats: { at: number; video: number; audio: number } | null = null;
+    const statsTimer = window.setInterval(() => {
+        void readRtcStats(peer.pc, prevStats).then(({ snap, next }) => {
+            prevStats = next;
+            opts.onStats?.(snap);
+        });
+    }, 1000);
+
     peer.input.onopen = () => {
         opts.onLog('dc input open');
         detachPad = attachGamepad({
@@ -90,6 +100,7 @@ export function attachWebrtc(opts: {
     ws.onerror = () => opts.onLog('ws webrtc error');
 
     return () => {
+        window.clearInterval(statsTimer);
         detachPad?.();
         detachPad = null;
         opts.onPad?.(null);

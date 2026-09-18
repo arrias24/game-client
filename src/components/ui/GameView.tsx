@@ -8,6 +8,8 @@ import {
     type RefObject,
 } from 'react';
 import { PadHud } from './PadHud.tsx';
+import { RtcStatsOverlay } from './RtcStats.tsx';
+import type { RtcStatsSnapshot } from '@/webrtc/stats.ts';
 
 const HIDE_DELAY_MS = 2400;
 
@@ -80,12 +82,14 @@ export const GameView = ({
     padId,
     banner,
     actions,
+    stats,
 }: {
     videoRef: RefObject<HTMLVideoElement | null>;
     hasTrack: boolean;
     padId: string | null;
     banner?: ReactNode;
     actions?: ReactNode;
+    stats?: RtcStatsSnapshot | null;
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const hideTimer = useRef<number>(0);
@@ -201,6 +205,7 @@ export const GameView = ({
                     activar audio
                 </button>
             )}
+            {hasTrack && <RtcStatsOverlay stats={stats ?? null} />}
             {hasTrack && !padId && (
                 <p className="game-view__hint">conectá un gamepad y apretá un botón</p>
             )}

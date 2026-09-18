@@ -11,6 +11,7 @@ import {
 } from '@services';
 import { attachWebrtc } from '@/webrtc/session.ts';
 import { StatusGameStation } from '@/types';
+import type { RtcStatsSnapshot } from '@/webrtc/stats.ts';
 
 const MAX_LOGS = 120;
 
@@ -23,6 +24,7 @@ export const useStation = () => {
     const [logs, setLogs] = useState<string[]>([]);
     const [hasTrack, setHasTrack] = useState(false);
     const [padId, setPadId] = useState<string | null>(null);
+    const [rtcStats, setRtcStats] = useState<RtcStatsSnapshot | null>(null);
     const [sessionId, setSessionId] = useState(newSessionId);
 
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -40,6 +42,7 @@ export const useStation = () => {
         if (video) video.srcObject = null;
         setHasTrack(false);
         setPadId(null);
+        setRtcStats(null);
     }, []);
 
     useEffect(() => {
@@ -60,7 +63,7 @@ export const useStation = () => {
                     if (ev.state) setStatus(ev.state);
                     if (typeof ev.progress === 'number') setProgress(ev.progress);
                     setError(null);
-                    appendLog(`STATE ${ev.state ?? ''} ${ev.progress ?? ''}`.trim());
+                    appendLog(`STATE ${ev.state ?? ''} ${ev.progress ?? ''}${ev.cacheHit ? ' cacheHit' : ''}`.trim());
                     return;
                 }
                 if (ev.type === 'ERROR') {
@@ -135,6 +138,7 @@ export const useStation = () => {
                 onLog: appendLog,
                 onError: (code) => setError(stationErrorMessage(code)),
                 onPad: setPadId,
+                onStats: setRtcStats,
             });
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Error al lanzar';
@@ -172,6 +176,7 @@ export const useStation = () => {
         logs,
         hasTrack,
         padId,
+        rtcStats,
         videoRef,
         prepare,
         launch,

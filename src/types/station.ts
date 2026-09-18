@@ -6,6 +6,7 @@ export type Health = {
     state: StatusGameStation;
     gameId: string | null;
     sessionId: string | null;
+    encoder?: string | null;
     cache: unknown[];
 };
 
