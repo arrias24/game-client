@@ -6,7 +6,9 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 ARG VITE_STATION_URL=/station
+ARG VITE_ICE_SERVERS=stun:stun.l.google.com:19302
 ENV VITE_STATION_URL=$VITE_STATION_URL
+ENV VITE_ICE_SERVERS=$VITE_ICE_SERVERS
 RUN npm run build
 
 FROM nginx:1.27-alpine

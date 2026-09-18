@@ -18,12 +18,21 @@ function iceFromStation(msg: IceMsg): RTCIceCandidateInit {
     return { candidate, sdpMid: msg.sdpMid, sdpMLineIndex: msg.sdpMLineIndex };
 }
 
+function iceServers(): RTCIceServer[] {
+    const raw = import.meta.env.VITE_ICE_SERVERS ?? '';
+    return raw
+        .split(',')
+        .map((urls) => urls.trim())
+        .filter(Boolean)
+        .map((urls) => ({ urls }));
+}
+
 export function createPeer(opts: {
     onTrack: (stream: MediaStream) => void;
     send: (msg: SignalOut) => void;
     onState?: (s: string) => void;
 }) {
-    const pc = new RTCPeerConnection({ iceServers: [] });
+    const pc = new RTCPeerConnection({ iceServers: iceServers() });
     const input = pc.createDataChannel('input', { ordered: true });
     pc.addTransceiver('video', { direction: 'recvonly' });
 
