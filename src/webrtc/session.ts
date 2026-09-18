@@ -19,12 +19,12 @@ export function attachWebrtc(opts: {
             ws.send(JSON.stringify(msg));
         },
         onTrack: (stream) => {
-            const track = stream.getVideoTracks()[0];
+            const videoTrack = stream.getVideoTracks()[0];
+            const audioTrack = stream.getAudioTracks()[0];
             opts.onLog(
-                `ontrack video=${track?.readyState ?? 'none'} muted=${track?.muted ?? '?'}`,
+                `ontrack video=${videoTrack?.readyState ?? 'none'} audio=${audioTrack?.readyState ?? 'none'}`,
             );
             const video = opts.video;
-            video.muted = true;
             video.playsInline = true;
             video.autoplay = true;
             video.setAttribute('playsinline', 'true');
@@ -34,7 +34,7 @@ export function attachWebrtc(opts: {
                 void video.play().then(
                     () => {
                         opts.onLog(
-                            `video play ${video.videoWidth}x${video.videoHeight}`,
+                            `video play ${video.videoWidth}x${video.videoHeight} muted=${video.muted}`,
                         );
                     },
                     () => {
@@ -46,9 +46,9 @@ export function attachWebrtc(opts: {
             video.onplaying = () => {
                 opts.onLog(`video playing ${video.videoWidth}x${video.videoHeight}`);
             };
-            if (track) {
-                track.onunmute = () => opts.onLog('track unmute');
-                track.onmute = () => opts.onLog('track mute');
+            if (videoTrack) {
+                videoTrack.onunmute = () => opts.onLog('track unmute');
+                videoTrack.onmute = () => opts.onLog('track mute');
             }
             play();
             opts.onTrack(stream);

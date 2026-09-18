@@ -149,6 +149,25 @@
     transition: opacity 0.2s ease;
 }
 
+.game-view__unmute {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 3;
+    transform: translate(-50%, -50%);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+    background: rgba(8, 8, 14, 0.82);
+    color: #e2e8f0;
+    font-size: 13px;
+    padding: 10px 16px;
+    cursor: pointer;
+}
+
+.game-view__unmute:hover {
+    background: rgba(15, 23, 42, 0.92);
+}
+
 .game-view.is-controls .game-view__hint {
     opacity: 1;
 }

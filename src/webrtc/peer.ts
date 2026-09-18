@@ -34,14 +34,18 @@ export function createPeer(opts: {
 }) {
     const pc = new RTCPeerConnection({ iceServers: iceServers() });
     const input = pc.createDataChannel('input', { ordered: true });
+    const remote = new MediaStream();
     pc.addTransceiver('video', { direction: 'recvonly' });
+    pc.addTransceiver('audio', { direction: 'recvonly' });
 
     pc.onconnectionstatechange = () => opts.onState?.(`pc ${pc.connectionState}`);
     pc.oniceconnectionstatechange = () => opts.onState?.(`ice ${pc.iceConnectionState}`);
 
     pc.ontrack = (ev) => {
-        const stream = ev.streams[0] ?? new MediaStream([ev.track]);
-        opts.onTrack(stream);
+        if (!remote.getTracks().some((t) => t.id === ev.track.id)) {
+            remote.addTrack(ev.track);
+        }
+        opts.onTrack(remote);
     };
 
     pc.onicecandidate = (ev) => {

@@ -120,10 +120,13 @@ export const useStation = () => {
             const video = videoRef.current;
             if (!video) throw new Error('No hay elemento de video');
             closePeer();
-            video.muted = true;
+            video.muted = false;
             video.playsInline = true;
             void video.play().catch(() => {
-                /* gesto de Jugar: desbloquea autoplay en Safari/HTTP */
+                video.muted = true;
+                void video.play().catch(() => {
+                    /* gesto de Jugar: desbloquea autoplay en Safari/HTTP */
+                });
             });
             peerCleanupRef.current = attachWebrtc({
                 signalPath: launched.wsUrl || '/ws/webrtc',

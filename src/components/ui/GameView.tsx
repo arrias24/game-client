@@ -91,6 +91,7 @@ export const GameView = ({
     const hideTimer = useRef<number>(0);
     const [controlsOn, setControlsOn] = useState(true);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [muted, setMuted] = useState(true);
 
     const showControls = useCallback((sticky = false) => {
         setControlsOn(true);
@@ -126,12 +127,30 @@ export const GameView = ({
         };
     }, [videoRef]);
 
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!hasTrack || !video) {
+            setMuted(true);
+            return;
+        }
+        video.muted = false;
+        void video.play().then(
+            () => setMuted(false),
+            () => {
+                video.muted = true;
+                setMuted(true);
+            },
+        );
+    }, [hasTrack, videoRef]);
+
     const unmute = () => {
         const video = videoRef.current;
         if (!video) return;
         video.muted = false;
+        setMuted(false);
         void video.play().catch(() => {
-            /* el browser puede pedir otro gesto */
+            video.muted = true;
+            setMuted(true);
         });
     };
 
@@ -160,7 +179,7 @@ export const GameView = ({
                 ref={videoRef}
                 autoPlay
                 playsInline
-                muted
+                muted={muted}
                 controls={false}
                 width={1280}
                 height={720}
@@ -169,6 +188,18 @@ export const GameView = ({
             />
             {!hasTrack && (
                 <div className="game-view__placeholder">pantalla de juego</div>
+            )}
+            {hasTrack && muted && (
+                <button
+                    type="button"
+                    className="game-view__unmute"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        unmute();
+                    }}
+                >
+                    activar audio
+                </button>
             )}
             {hasTrack && !padId && (
                 <p className="game-view__hint">conectá un gamepad y apretá un botón</p>
