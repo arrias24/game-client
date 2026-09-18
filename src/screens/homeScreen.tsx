@@ -27,30 +27,43 @@ export const HomeScreen = () => {
 
     return (
         <div className="station-page">
-            <div className="station-card">
-                <header className="station-header">
-                    <h1>Airtek Cloud Game</h1>
-                    <StatusBadge status={status} connected={connected} progress={progress} />
-                </header>
+            <div className="station-body">
+                <div className="station-main">
+                    <header className="station-header">
+                        <h1>Airtek Cloud Game</h1>
+                        <StatusBadge status={status} connected={connected} progress={progress} />
+                    </header>
 
-                {error && <div className="station-toast" role="alert">{error}</div>}
+                    {error && <div className="station-toast" role="alert">{error}</div>}
 
-                <GameView videoRef={videoRef} hasTrack={hasTrack} padId={padId} />
+                    <section className="station-stage" aria-label="Video">
+                        <GameView
+                            videoRef={videoRef}
+                            hasTrack={hasTrack}
+                            padId={padId}
+                            banner={connected && status === StatusGameStation.PREPARING
+                                ? <ProgressBar progress={progress} />
+                                : null}
+                            actions={(
+                                <Controls
+                                    status={status}
+                                    connected={connected}
+                                    loading={loading}
+                                    onPrepare={() => void prepare()}
+                                    onLaunch={() => void launch()}
+                                    onStop={() => void stop()}
+                                />
+                            )}
+                        />
+                    </section>
+                </div>
 
-                {connected && status === StatusGameStation.PREPARING && (
-                    <ProgressBar progress={progress} />
-                )}
-
-                <Controls
-                    status={status}
-                    connected={connected}
-                    loading={loading}
-                    onPrepare={() => void prepare()}
-                    onLaunch={() => void launch()}
-                    onStop={() => void stop()}
-                />
-
-                <pre ref={logRef} className="station-log">{logs.join('\n') || 'esperando estación…'}</pre>
+                <aside className="station-aside" aria-label="Registro">
+                    <span className="station-aside__label">Logs</span>
+                    <pre ref={logRef} className="station-log">
+                        {logs.join('\n') || 'esperando estación…'}
+                    </pre>
+                </aside>
             </div>
         </div>
     );
