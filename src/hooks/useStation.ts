@@ -7,11 +7,12 @@ import {
     prepare as prepareStation,
     stationErrorMessage,
     stop as stopStation,
+    GAME_ID,
 } from '@services';
 import { attachWebrtc } from '@/webrtc/session.ts';
 import { StatusGameStation } from '@/types';
 
-const MAX_LOGS = 80;
+const MAX_LOGS = 120;
 
 export const useStation = () => {
     const [status, setStatus] = useState<StatusGameStation>(StatusGameStation.IDLE);
@@ -21,6 +22,7 @@ export const useStation = () => {
     const [error, setError] = useState<string | null>(null);
     const [logs, setLogs] = useState<string[]>([]);
     const [hasTrack, setHasTrack] = useState(false);
+    const [padId, setPadId] = useState<string | null>(null);
     const [sessionId, setSessionId] = useState(newSessionId);
 
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -37,6 +39,7 @@ export const useStation = () => {
         const video = videoRef.current;
         if (video) video.srcObject = null;
         setHasTrack(false);
+        setPadId(null);
     }, []);
 
     useEffect(() => {
@@ -78,12 +81,27 @@ export const useStation = () => {
         };
     }, [appendLog, closePeer]);
 
+    useEffect(() => {
+        if (status !== StatusGameStation.PLAYING) return;
+        const timer = window.setTimeout(() => {
+            const video = videoRef.current;
+            if (!hasTrack) {
+                setError('sin video — ¿display en la estación? / ¿HTTPS?');
+                return;
+            }
+            if (video && video.videoWidth === 0) {
+                setError('video sin frames — click en la pantalla');
+            }
+        }, 4000);
+        return () => window.clearTimeout(timer);
+    }, [status, hasTrack]);
+
     const prepare = async () => {
         setLoading(true);
         setError(null);
         try {
             await prepareStation(sessionId);
-            appendLog('prepare 202');
+            appendLog(`prepare 202 game=${GAME_ID}`);
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Error al preparar';
             setError(message);
@@ -98,16 +116,22 @@ export const useStation = () => {
         setError(null);
         try {
             const launched = await launchStation(sessionId);
-            appendLog('launch 200');
+            appendLog(`launch 200 game=${GAME_ID}`);
             const video = videoRef.current;
             if (!video) throw new Error('No hay elemento de video');
             closePeer();
+            video.muted = true;
+            video.playsInline = true;
+            void video.play().catch(() => {
+                /* gesto de Jugar: desbloquea autoplay en Safari/HTTP */
+            });
             peerCleanupRef.current = attachWebrtc({
                 signalPath: launched.wsUrl || '/ws/webrtc',
                 video,
                 onTrack: (stream) => setHasTrack(Boolean(stream)),
                 onLog: appendLog,
                 onError: (code) => setError(stationErrorMessage(code)),
+                onPad: setPadId,
             });
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Error al lanzar';
@@ -144,6 +168,7 @@ export const useStation = () => {
         error,
         logs,
         hasTrack,
+        padId,
         videoRef,
         prepare,
         launch,

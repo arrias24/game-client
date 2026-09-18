@@ -1,9 +1,7 @@
 import { restUrl } from './urls.ts';
 import type { Health, LaunchResponse, PrepareResponse, StationErrorBody } from '@/types';
 
-const SESSION_GAME = {
-    gameId: 'test-pattern',
-};
+export const GAME_ID = import.meta.env.VITE_GAME_ID || 'test-pattern';
 
 const ERROR_UI: Record<string, string> = {
     STATION_BUSY: 'El Spark está en partida. Probá en un minuto.',
@@ -37,7 +35,20 @@ async function readError(res: Response): Promise<string> {
 }
 
 export function newSessionId() {
-    return crypto.randomUUID();
+    const c = globalThis.crypto;
+    if (c && typeof c.randomUUID === 'function') {
+        return c.randomUUID();
+    }
+    const bytes = new Uint8Array(16);
+    if (c && typeof c.getRandomValues === 'function') {
+        c.getRandomValues(bytes);
+    } else {
+        for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 export async function getHealth(): Promise<Health> {
@@ -52,7 +63,7 @@ export async function prepare(sessionId: string): Promise<PrepareResponse> {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             sessionId,
-            gameId: SESSION_GAME.gameId,
+            gameId: GAME_ID,
             version: '1.0.0',
             source: {
                 type: 'local',
@@ -69,7 +80,7 @@ export async function launch(sessionId: string): Promise<LaunchResponse> {
     const res = await fetch(restUrl('/launch'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, gameId: SESSION_GAME.gameId }),
+        body: JSON.stringify({ sessionId, gameId: GAME_ID }),
     });
     if (!res.ok) throw new StationRequestError(await readError(res));
     return res.json() as Promise<LaunchResponse>;

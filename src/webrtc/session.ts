@@ -1,4 +1,5 @@
 import { wsUrl } from '@services/api/urls.ts';
+import { attachGamepad } from '@/webrtc/gamepad.ts';
 import { createPeer, type SignalIn } from '@/webrtc/peer.ts';
 
 export function attachWebrtc(opts: {
@@ -7,8 +8,10 @@ export function attachWebrtc(opts: {
     onTrack: (stream: MediaStream | null) => void;
     onLog: (line: string) => void;
     onError: (code: string) => void;
+    onPad?: (id: string | null) => void;
 }) {
     const ws = new WebSocket(wsUrl(opts.signalPath));
+    let detachPad: (() => void) | null = null;
     const peer = createPeer({
         send: (msg) => {
             if (ws.readyState !== WebSocket.OPEN) return;
@@ -16,21 +19,63 @@ export function attachWebrtc(opts: {
             ws.send(JSON.stringify(msg));
         },
         onTrack: (stream) => {
-            opts.onLog('ontrack');
-            opts.video.srcObject = stream;
-            void opts.video.play().catch(() => {
-                /* autoplay: el click en el video lo desbloquea */
-            });
+            const track = stream.getVideoTracks()[0];
+            opts.onLog(
+                `ontrack video=${track?.readyState ?? 'none'} muted=${track?.muted ?? '?'}`,
+            );
+            const video = opts.video;
+            video.muted = true;
+            video.playsInline = true;
+            video.autoplay = true;
+            video.setAttribute('playsinline', 'true');
+            video.setAttribute('webkit-playsinline', 'true');
+            video.srcObject = stream;
+            const play = () => {
+                void video.play().then(
+                    () => {
+                        opts.onLog(
+                            `video play ${video.videoWidth}x${video.videoHeight}`,
+                        );
+                    },
+                    () => {
+                        opts.onLog('autoplay blocked — click the video');
+                    },
+                );
+            };
+            video.onloadedmetadata = play;
+            video.onplaying = () => {
+                opts.onLog(`video playing ${video.videoWidth}x${video.videoHeight}`);
+            };
+            if (track) {
+                track.onunmute = () => opts.onLog('track unmute');
+                track.onmute = () => opts.onLog('track mute');
+            }
+            play();
             opts.onTrack(stream);
         },
         onState: (s) => opts.onLog(s),
     });
+
+    peer.input.binaryType = 'arraybuffer';
+    peer.input.onopen = () => {
+        opts.onLog('dc input open');
+        detachPad = attachGamepad({
+            channel: peer.input,
+            onPad: (id) => {
+                opts.onLog(id ? `gamepad ${id}` : 'gamepad desconectado');
+                opts.onPad?.(id);
+            },
+            onPadEvent: (line) => opts.onLog(line),
+        });
+    };
 
     ws.onmessage = async (ev) => {
         const msg = JSON.parse(String(ev.data)) as SignalIn;
         opts.onLog(`← ${msg.type}${msg.type === 'ERROR' ? ` ${msg.code}` : ''}`);
         if (msg.type === 'ERROR') {
             opts.onError(msg.code);
+            detachPad?.();
+            detachPad = null;
             peer.close();
             ws.close();
             return;
@@ -45,6 +90,9 @@ export function attachWebrtc(opts: {
     ws.onerror = () => opts.onLog('ws webrtc error');
 
     return () => {
+        detachPad?.();
+        detachPad = null;
+        opts.onPad?.(null);
         peer.close();
         ws.close();
         opts.video.srcObject = null;

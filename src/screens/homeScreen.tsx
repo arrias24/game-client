@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Controls, GameView, ProgressBar, StatusBadge } from '@components';
 import { useStation } from '@hooks';
 import { StatusGameStation } from '@/types';
@@ -11,11 +12,18 @@ export const HomeScreen = () => {
         error,
         logs,
         hasTrack,
+        padId,
         videoRef,
         prepare,
         launch,
         stop,
     } = useStation();
+    const logRef = useRef<HTMLPreElement>(null);
+
+    useEffect(() => {
+        const el = logRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+    }, [logs]);
 
     return (
         <div className="station-page">
@@ -27,7 +35,7 @@ export const HomeScreen = () => {
 
                 {error && <div className="station-toast" role="alert">{error}</div>}
 
-                <GameView videoRef={videoRef} hasTrack={hasTrack} />
+                <GameView videoRef={videoRef} hasTrack={hasTrack} padId={padId} />
 
                 {connected && status === StatusGameStation.PREPARING && (
                     <ProgressBar progress={progress} />
@@ -42,7 +50,7 @@ export const HomeScreen = () => {
                     onStop={() => void stop()}
                 />
 
-                <pre className="station-log">{logs.join('\n') || 'esperando estación…'}</pre>
+                <pre ref={logRef} className="station-log">{logs.join('\n') || 'esperando estación…'}</pre>
             </div>
         </div>
     );

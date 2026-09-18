@@ -58,12 +58,17 @@
 }
 
 .game-view video {
+    position: absolute;
+    top: 0;
+    left: 0;
     display: block;
     width: 100%;
     height: 100%;
     object-fit: contain;
     background: #000;
     cursor: pointer;
+    z-index: 0;
+    color-scheme: only light;
 }
 
 .game-view__placeholder {
@@ -76,6 +81,89 @@
     font-size: 15px;
     letter-spacing: 0.04em;
     pointer-events: none;
+    z-index: 1;
+}
+
+.game-view__hint {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 1;
+    margin: 0;
+    pointer-events: none;
+    color: #e2e8f0;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    text-align: center;
+    text-shadow: 0 1px 4px #000;
+}
+
+.pad-hud {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    z-index: 2;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pad-hud__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.pad-hud__name {
+    color: #94a3b8;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pad-hud__held {
+    color: #e2e8f0;
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: 13px;
+    font-weight: 600;
+    text-align: right;
+}
+
+.pad-hud__keys {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pad-key {
+    min-width: 34px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    text-align: center;
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: #64748b;
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pad-key.is-on {
+    color: #0f172a;
+    background: #38bdf8;
+    border-color: #7dd3fc;
+    font-weight: 700;
 }
 
 .controls {
