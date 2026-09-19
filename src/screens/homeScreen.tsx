@@ -14,6 +14,8 @@ export const HomeScreen = () => {
         hasTrack,
         needs,
         padIds,
+        heldKeys,
+        mouseHud,
         pointerLocked,
         rtcStats,
         videoRef,
@@ -45,6 +47,8 @@ export const HomeScreen = () => {
                             hasTrack={hasTrack}
                             needs={needs}
                             padIds={padIds}
+                            heldKeys={heldKeys}
+                            mouseHud={mouseHud}
                             pointerLocked={pointerLocked}
                             stats={rtcStats}
                             banner={connected && status === StatusGameStation.PREPARING

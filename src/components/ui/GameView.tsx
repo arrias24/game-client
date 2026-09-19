@@ -8,6 +8,7 @@ import {
     type RefObject,
 } from 'react';
 import { PadHud } from './PadHud.tsx';
+import { InputHud, type MouseHud } from './InputHud.tsx';
 import { RtcStatsOverlay } from './RtcStats.tsx';
 import type { RtcStatsSnapshot } from '@/webrtc/stats.ts';
 import type { InputNeeds } from '@/webrtc/input.ts';
@@ -96,6 +97,8 @@ export const GameView = ({
     hasTrack,
     needs,
     padIds,
+    heldKeys,
+    mouseHud,
     pointerLocked,
     banner,
     actions,
@@ -105,6 +108,8 @@ export const GameView = ({
     hasTrack: boolean;
     needs: InputNeeds;
     padIds: string[];
+    heldKeys: string[];
+    mouseHud: MouseHud | null;
     pointerLocked: boolean;
     banner?: ReactNode;
     actions?: ReactNode;
@@ -212,6 +217,7 @@ export const GameView = ({
         <div
             ref={containerRef}
             className={classes}
+            tabIndex={0}
             onMouseMove={() => showControls()}
             onPointerDown={() => showControls()}
             onMouseLeave={() => {
@@ -246,6 +252,9 @@ export const GameView = ({
             )}
             {hasTrack && <RtcStatsOverlay stats={stats ?? null} />}
             {hint && <p className="game-view__hint">{hint}</p>}
+            {hasTrack && (needs.keyboard || needs.mouse) && (
+                <InputHud keyboard={needs.keyboard} keys={heldKeys} mouse={mouseHud} />
+            )}
             {hasTrack && padIds.length > 0 && <PadHud ids={padIds} />}
 
             {banner && <div className="game-view__banner">{banner}</div>}

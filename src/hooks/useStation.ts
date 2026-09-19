@@ -13,6 +13,7 @@ import { attachWebrtc } from '@/webrtc/session.ts';
 import { StatusGameStation } from '@/types';
 import type { RtcStatsSnapshot } from '@/webrtc/stats.ts';
 import { normalizeNeeds, type InputNeeds } from '@/webrtc/input.ts';
+import type { MouseHud } from '@/webrtc/pointer.ts';
 
 const MAX_LOGS = 120;
 
@@ -26,6 +27,8 @@ export const useStation = () => {
     const [hasTrack, setHasTrack] = useState(false);
     const [needs, setNeeds] = useState<InputNeeds>(() => normalizeNeeds(null));
     const [padIds, setPadIds] = useState<string[]>([]);
+    const [heldKeys, setHeldKeys] = useState<string[]>([]);
+    const [mouseHud, setMouseHud] = useState<MouseHud | null>(null);
     const [pointerLocked, setPointerLocked] = useState(false);
     const [rtcStats, setRtcStats] = useState<RtcStatsSnapshot | null>(null);
     const [sessionId, setSessionId] = useState(newSessionId);
@@ -45,6 +48,8 @@ export const useStation = () => {
         if (video) video.srcObject = null;
         setHasTrack(false);
         setPadIds([]);
+        setHeldKeys([]);
+        setMouseHud(null);
         setPointerLocked(false);
         setRtcStats(null);
     }, []);
@@ -53,8 +58,15 @@ export const useStation = () => {
         void getHealth()
             .then((data) => {
                 if (data.state) setStatus(data.state);
-                if (data.needs) setNeeds(normalizeNeeds(data.needs));
-                appendLog(`health ${data.state}`);
+                if (data.needs) {
+                    const n = normalizeNeeds(data.needs);
+                    setNeeds(n);
+                    appendLog(
+                        `health ${data.state} pads=${n.gamepad} keyboard=${n.keyboard} mouse=${n.mouse}`,
+                    );
+                } else {
+                    appendLog(`health ${data.state}`);
+                }
             })
             .catch(() => {
                 setStatus(StatusGameStation.FAILED);
@@ -126,12 +138,17 @@ export const useStation = () => {
             const launched = await launchStation(sessionId);
             const inputNeeds = launched.needs ? normalizeNeeds(launched.needs) : needs;
             if (launched.needs) setNeeds(inputNeeds);
-            appendLog(`launch 200 game=${GAME_ID}`);
+            appendLog(
+                `launch 200 game=${GAME_ID} pads=${inputNeeds.gamepad} keyboard=${inputNeeds.keyboard} mouse=${inputNeeds.mouse}`,
+            );
             const video = videoRef.current;
             if (!video) throw new Error('No hay elemento de video');
             closePeer();
             video.muted = false;
             video.playsInline = true;
+            video.tabIndex = 0;
+            (document.activeElement as HTMLElement | null)?.blur();
+            video.focus();
             void video.play().catch(() => {
                 video.muted = true;
                 void video.play().catch(() => {
@@ -146,6 +163,8 @@ export const useStation = () => {
                 onLog: appendLog,
                 onError: (code) => setError(stationErrorMessage(code)),
                 onPads: setPadIds,
+                onKeys: setHeldKeys,
+                onMouse: setMouseHud,
                 onPointerLock: setPointerLocked,
                 onStats: setRtcStats,
             });
@@ -186,6 +205,8 @@ export const useStation = () => {
         hasTrack,
         needs,
         padIds,
+        heldKeys,
+        mouseHud,
         pointerLocked,
         rtcStats,
         videoRef,

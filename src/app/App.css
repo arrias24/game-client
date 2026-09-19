@@ -194,8 +194,29 @@
     pointer-events: none;
 }
 
-.game-view.is-controls .game-view__hint {
-    opacity: 1;
+.input-hud {
+    position: absolute;
+    left: 10px;
+    top: 10px;
+    z-index: 3;
+    pointer-events: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(8, 8, 14, 0.72);
+    color: #e2e8f0;
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: 11px;
+}
+
+.input-hud__keys {
+    color: #7dd3fc;
+}
+
+.input-hud__mouse {
+    color: #cbd5e1;
 }
 
 .pad-hud {

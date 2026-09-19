@@ -110,18 +110,28 @@ const KEY: Record<string, number> = {
     ContextMenu: 127,
 };
 
-function isUiTarget(target: EventTarget | null): boolean {
+function isTypingTarget(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
-    return Boolean(
-        target.closest('button, a, input, textarea, select, .station-log, .station-aside'),
-    );
+    if (target.isContentEditable) return true;
+    const tag = target.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
+function shortLabel(ev: KeyboardEvent): string {
+    if (ev.key.length === 1) return ev.key.toUpperCase();
+    return ev.code.replace(/^Key/, '').replace(/^Digit/, '').replace(/^Arrow/, '');
 }
 
 export function attachKeyboard(opts: {
     channel: RTCDataChannel;
+    onKeys?: (held: string[]) => void;
     onLog?: (line: string) => void;
 }) {
-    const down = new Set<number>();
+    const down = new Map<number, string>();
+
+    const emit = () => {
+        opts.onKeys?.([...down.values()]);
+    };
 
     const send = (action: 1 | 2, code: number, label: string) => {
         const sent = sendBuf(opts.channel, encodeKey(action, code));
@@ -133,38 +143,46 @@ export function attachKeyboard(opts: {
     };
 
     const onDown = (ev: KeyboardEvent) => {
-        if (ev.repeat || isUiTarget(ev.target)) return;
+        if (ev.repeat || isTypingTarget(ev.target)) return;
         const code = KEY[ev.code];
         if (!code) return;
         ev.preventDefault();
         if (down.has(code)) return;
-        down.add(code);
-        send(ACTION_DOWN, code, ev.code);
+        const label = shortLabel(ev);
+        down.set(code, label);
+        emit();
+        send(ACTION_DOWN, code, label);
     };
 
     const onUp = (ev: KeyboardEvent) => {
         const code = KEY[ev.code];
         if (!code || !down.has(code)) return;
+        const label = down.get(code) ?? shortLabel(ev);
         down.delete(code);
-        send(ACTION_UP, code, ev.code);
-        if (!isUiTarget(ev.target)) ev.preventDefault();
+        emit();
+        send(ACTION_UP, code, label);
+        if (!isTypingTarget(ev.target)) ev.preventDefault();
     };
 
     const flush = () => {
-        for (const code of down) {
+        for (const [code, label] of down) {
             sendBuf(opts.channel, encodeKey(ACTION_UP, code));
+            opts.onLog?.(`key ${label} up`);
         }
         down.clear();
+        emit();
     };
 
     window.addEventListener('keydown', onDown, true);
     window.addEventListener('keyup', onUp, true);
     window.addEventListener('blur', flush);
+    opts.onLog?.('teclado listo — clickeá el video y escribí');
 
     return () => {
         window.removeEventListener('keydown', onDown, true);
         window.removeEventListener('keyup', onUp, true);
         window.removeEventListener('blur', flush);
         flush();
+        opts.onKeys?.([]);
     };
 }

@@ -7,6 +7,13 @@ import {
     sendBuf,
 } from './input.ts';
 
+export type MouseHud = {
+    x: number;
+    y: number;
+    buttons: number;
+    locked: boolean;
+};
+
 export function mapVideoCoords(
     video: HTMLVideoElement,
     clientX: number,
@@ -29,17 +36,45 @@ export function mapVideoCoords(
     };
 }
 
+function isChrome(target: EventTarget | null): boolean {
+    return (
+        target instanceof Element
+        && Boolean(target.closest('.game-view__bar, .game-view__unmute, .game-view__fs'))
+    );
+}
+
 export function attachPointer(opts: {
     channel: RTCDataChannel;
     video: HTMLVideoElement;
+    onMouse?: (state: MouseHud | null) => void;
     onLock?: (locked: boolean) => void;
     onLog?: (line: string) => void;
 }) {
     const held = new Set<number>();
     let locked = false;
+    let lastHud = 0;
+    let lastPt = { x: 0, y: 0 };
+    const root: HTMLElement = opts.video.closest('.game-view') ?? opts.video;
+
+    const emitHud = (force = false) => {
+        const now = performance.now();
+        if (!force && now - lastHud < 50) return;
+        lastHud = now;
+        opts.onMouse?.({
+            x: lastPt.x,
+            y: lastPt.y,
+            buttons: held.size,
+            locked,
+        });
+    };
 
     const sendButton = (action: 1 | 2, button: number) => {
-        sendBuf(opts.channel, encodePointerButton(action, button));
+        const sent = sendBuf(opts.channel, encodePointerButton(action, button));
+        opts.onLog?.(
+            sent
+                ? `mouse ${action === ACTION_DOWN ? 'down' : 'up'} b${button}`
+                : `mouse b${button} (dc cerrado)`,
+        );
     };
 
     const flushButtons = () => {
@@ -47,69 +82,91 @@ export function attachPointer(opts: {
             sendBuf(opts.channel, encodePointerButton(ACTION_UP, button));
         }
         held.clear();
+        emitHud(true);
     };
 
     const onLockChange = () => {
-        locked = document.pointerLockElement === opts.video;
+        locked =
+            document.pointerLockElement === opts.video
+            || document.pointerLockElement === root;
         opts.onLock?.(locked);
         if (!locked) flushButtons();
+        else emitHud(true);
     };
 
-    const onMouseDown = (ev: MouseEvent) => {
-        if (ev.button > 4) return;
+    const onDown = (ev: PointerEvent | MouseEvent) => {
+        if (isChrome(ev.target) || ev.button > 4) return;
         opts.video.focus();
         held.add(ev.button);
         sendButton(ACTION_DOWN, ev.button);
+        const pt = mapVideoCoords(opts.video, ev.clientX, ev.clientY);
+        if (pt) lastPt = pt;
+        emitHud(true);
         ev.preventDefault();
     };
 
-    const onMouseUp = (ev: MouseEvent) => {
+    const onUp = (ev: PointerEvent | MouseEvent) => {
         if (ev.button > 4) return;
         if (!held.has(ev.button)) return;
         held.delete(ev.button);
         sendButton(ACTION_UP, ev.button);
+        emitHud(true);
         ev.preventDefault();
     };
 
-    const onMouseMove = (ev: MouseEvent) => {
+    const onMove = (ev: PointerEvent | MouseEvent) => {
         if (opts.channel.readyState !== 'open') return;
         if (locked) {
             const dx = ev.movementX | 0;
             const dy = ev.movementY | 0;
-            if (dx || dy) sendBuf(opts.channel, encodePointerMove(dx, dy, false));
+            if (dx || dy) {
+                lastPt = { x: lastPt.x + dx, y: lastPt.y + dy };
+                sendBuf(opts.channel, encodePointerMove(dx, dy, false));
+                emitHud();
+            }
             return;
         }
+        if (isChrome(ev.target)) return;
         const pt = mapVideoCoords(opts.video, ev.clientX, ev.clientY);
-        if (pt) sendBuf(opts.channel, encodePointerMove(pt.x, pt.y, true));
+        if (!pt) return;
+        lastPt = pt;
+        sendBuf(opts.channel, encodePointerMove(pt.x, pt.y, true));
+        emitHud();
     };
 
     const onWheel = (ev: WheelEvent) => {
+        if (isChrome(ev.target)) return;
         const ticks = ev.deltaY === 0 ? 0 : ev.deltaY < 0 ? 1 : -1;
         if (!ticks) return;
         sendBuf(opts.channel, encodePointerWheel(ticks));
         ev.preventDefault();
     };
 
-    const onContext = (ev: Event) => ev.preventDefault();
+    const onContext = (ev: Event) => {
+        if (!isChrome(ev.target)) ev.preventDefault();
+    };
 
-    opts.video.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mouseup', onMouseUp);
-    opts.video.addEventListener('mousemove', onMouseMove);
-    opts.video.addEventListener('wheel', onWheel, { passive: false });
-    opts.video.addEventListener('contextmenu', onContext);
+    root.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointerup', onUp);
+    root.addEventListener('pointermove', onMove);
+    root.addEventListener('wheel', onWheel, { passive: false });
+    root.addEventListener('contextmenu', onContext);
     document.addEventListener('pointerlockchange', onLockChange);
+    opts.onLog?.('mouse listo — mové el puntero sobre el video');
+    opts.onMouse?.({ x: 0, y: 0, buttons: 0, locked: false });
 
     return () => {
-        opts.video.removeEventListener('mousedown', onMouseDown);
-        window.removeEventListener('mouseup', onMouseUp);
-        opts.video.removeEventListener('mousemove', onMouseMove);
-        opts.video.removeEventListener('wheel', onWheel);
-        opts.video.removeEventListener('contextmenu', onContext);
+        root.removeEventListener('pointerdown', onDown);
+        window.removeEventListener('pointerup', onUp);
+        root.removeEventListener('pointermove', onMove);
+        root.removeEventListener('wheel', onWheel);
+        root.removeEventListener('contextmenu', onContext);
         document.removeEventListener('pointerlockchange', onLockChange);
-        if (document.pointerLockElement === opts.video) {
+        if (document.pointerLockElement === opts.video || document.pointerLockElement === root) {
             document.exitPointerLock();
         }
         flushButtons();
         opts.onLock?.(false);
+        opts.onMouse?.(null);
     };
 }

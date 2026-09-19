@@ -1,7 +1,7 @@
 import { wsUrl } from '@services/api/urls.ts';
 import { attachGamepad } from '@/webrtc/gamepad.ts';
 import { attachKeyboard } from '@/webrtc/keyboard.ts';
-import { attachPointer } from '@/webrtc/pointer.ts';
+import { attachPointer, type MouseHud } from '@/webrtc/pointer.ts';
 import { type InputNeeds, normalizeNeeds } from '@/webrtc/input.ts';
 import { createPeer, type SignalIn } from '@/webrtc/peer.ts';
 import { readRtcStats, type RtcStatsSnapshot } from '@/webrtc/stats.ts';
@@ -14,6 +14,8 @@ export function attachWebrtc(opts: {
     onLog: (line: string) => void;
     onError: (code: string) => void;
     onPads?: (ids: string[]) => void;
+    onKeys?: (held: string[]) => void;
+    onMouse?: (state: MouseHud | null) => void;
     onPointerLock?: (locked: boolean) => void;
     onStats?: (stats: RtcStatsSnapshot) => void;
 }) {
@@ -38,6 +40,7 @@ export function attachWebrtc(opts: {
             video.setAttribute('playsinline', 'true');
             video.setAttribute('webkit-playsinline', 'true');
             video.tabIndex = 0;
+            video.focus();
             video.srcObject = stream;
             const play = () => {
                 void video.play().then(
@@ -97,17 +100,28 @@ export function attachWebrtc(opts: {
             );
         }
         if (needs.keyboard) {
-            stop.push(attachKeyboard({ channel: peer.input, onLog: opts.onLog }));
+            stop.push(
+                attachKeyboard({
+                    channel: peer.input,
+                    onKeys: opts.onKeys,
+                    onLog: opts.onLog,
+                }),
+            );
+        } else {
+            opts.onLog('teclado desactivado por needs.keyboard=false');
         }
         if (needs.mouse) {
             stop.push(
                 attachPointer({
                     channel: peer.input,
                     video: opts.video,
+                    onMouse: opts.onMouse,
                     onLock: opts.onPointerLock,
                     onLog: opts.onLog,
                 }),
             );
+        } else {
+            opts.onLog('mouse desactivado por needs.mouse=false');
         }
         detachInput = () => {
             while (stop.length) stop.pop()?.();
@@ -139,6 +153,8 @@ export function attachWebrtc(opts: {
         detachInput?.();
         detachInput = null;
         opts.onPads?.([]);
+        opts.onKeys?.([]);
+        opts.onMouse?.(null);
         opts.onPointerLock?.(false);
         peer.close();
         ws.close();
