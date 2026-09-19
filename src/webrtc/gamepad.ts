@@ -87,10 +87,13 @@ export function attachGamepad(opts: {
     const poll = () => {
         raf = requestAnimationFrame(poll);
         if (opts.channel.readyState !== 'open') return;
-        const pads = navigator.getGamepads();
+        const connected = [...navigator.getGamepads()]
+            .filter((pad): pad is Gamepad => pad != null)
+            .sort((a, b) => a.index - b.index)
+            .slice(0, maxPads);
         let changed = false;
         for (let slot = 0; slot < maxPads; slot++) {
-            const pad = pads[slot];
+            const pad = connected[slot];
             if (!pad) {
                 if (ids[slot]) {
                     ids[slot] = null;
@@ -145,13 +148,8 @@ export function attachGamepad(opts: {
     const onConnected = () => {
         void navigator.getGamepads();
     };
-    const onDisconnected = (ev: GamepadEvent) => {
-        const slot = ev.gamepad.index;
-        if (slot >= 0 && slot < maxPads && ids[slot]) {
-            ids[slot] = null;
-            flushSlot(slot);
-            emitPads();
-        }
+    const onDisconnected = () => {
+        void navigator.getGamepads();
     };
 
     window.addEventListener('gamepadconnected', onConnected);

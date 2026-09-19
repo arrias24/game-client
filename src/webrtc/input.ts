@@ -29,15 +29,17 @@ export function normalizeNeeds(
     } | null,
 ): InputNeeds {
     if (!raw) {
-        return { gamepad: 0, keyboard: false, mouse: false };
+        return { gamepad: 1, keyboard: false, mouse: false };
     }
-    let gamepad: GamepadSlots = 0;
-    if (typeof raw.gamepad === 'boolean') {
+    let gamepad: GamepadSlots = 1;
+    if (raw.gamepad === undefined || raw.gamepad === null) {
+        gamepad = 1;
+    } else if (typeof raw.gamepad === 'boolean') {
         gamepad = raw.gamepad ? 1 : 0;
     } else if (typeof raw.gamepad === 'number' && Number.isFinite(raw.gamepad)) {
         const n = Math.trunc(raw.gamepad);
-        if (n >= 1 && n <= 4) gamepad = n as GamepadSlots;
-        else gamepad = 0;
+        if (n >= 0 && n <= 4) gamepad = n as GamepadSlots;
+        else gamepad = 1;
     }
     return {
         gamepad,
