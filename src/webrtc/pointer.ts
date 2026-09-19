@@ -146,11 +146,18 @@ export function attachPointer(opts: {
         if (!isChrome(ev.target)) ev.preventDefault();
     };
 
+    const onDblClick = (ev: Event) => {
+        if (isChrome(ev.target)) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+    };
+
     root.addEventListener('pointerdown', onDown);
     window.addEventListener('pointerup', onUp);
     root.addEventListener('pointermove', onMove);
     root.addEventListener('wheel', onWheel, { passive: false });
     root.addEventListener('contextmenu', onContext);
+    root.addEventListener('dblclick', onDblClick, true);
     document.addEventListener('pointerlockchange', onLockChange);
     opts.onLog?.('mouse listo — mové el puntero sobre el video');
     opts.onMouse?.({ x: 0, y: 0, buttons: 0, locked: false });
@@ -161,6 +168,7 @@ export function attachPointer(opts: {
         root.removeEventListener('pointermove', onMove);
         root.removeEventListener('wheel', onWheel);
         root.removeEventListener('contextmenu', onContext);
+        root.removeEventListener('dblclick', onDblClick, true);
         document.removeEventListener('pointerlockchange', onLockChange);
         if (document.pointerLockElement === opts.video || document.pointerLockElement === root) {
             document.exitPointerLock();

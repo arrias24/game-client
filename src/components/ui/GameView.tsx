@@ -223,6 +223,11 @@ export const GameView = ({
             onMouseLeave={() => {
                 if (hasTrack) setControlsOn(false);
             }}
+            onDoubleClick={(event) => {
+                if (!needs.mouse) return;
+                event.preventDefault();
+                event.stopPropagation();
+            }}
         >
             <video
                 ref={videoRef}
@@ -232,8 +237,8 @@ export const GameView = ({
                 controls={false}
                 width={1280}
                 height={720}
-                onClick={unmute}
-                onDoubleClick={toggleFullscreen}
+                onClick={needs.mouse ? undefined : unmute}
+                onDoubleClick={needs.mouse ? undefined : toggleFullscreen}
             />
             {!hasTrack && (
                 <div className="game-view__placeholder">pantalla de juego</div>

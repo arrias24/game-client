@@ -111,6 +111,10 @@
     cursor: crosshair;
 }
 
+.game-view.has-mouse video::-webkit-media-controls {
+    display: none !important;
+}
+
 .game-view.has-track.is-locked,
 .game-view.has-track.is-locked video {
     cursor: none;
