@@ -1,14 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PAD_BUTTON_LABELS } from '@/webrtc/gamepad.ts';
 
-function readPad(): Gamepad | null {
-    const pads = navigator.getGamepads();
-    for (const pad of pads) {
-        if (pad) return pad;
-    }
-    return null;
-}
-
 function isDown(button: GamepadButton | undefined): boolean {
     if (!button) return false;
     return button.pressed || button.value > 0.5;
@@ -16,7 +8,11 @@ function isDown(button: GamepadButton | undefined): boolean {
 
 const EMPTY = PAD_BUTTON_LABELS.map(() => false);
 
-export const PadHud = ({ id }: { id: string }) => {
+function shortName(id: string) {
+    return id.replace(/\s*\(.*$/, '').trim() || id;
+}
+
+export const PadHud = ({ ids }: { ids: string[] }) => {
     const [down, setDown] = useState<boolean[]>(EMPTY);
 
     useEffect(() => {
@@ -24,8 +20,10 @@ export const PadHud = ({ id }: { id: string }) => {
         let last = '';
         const tick = () => {
             raf = requestAnimationFrame(tick);
-            const pad = readPad();
-            const next = PAD_BUTTON_LABELS.map((_, i) => isDown(pad?.buttons[i]));
+            const pads = navigator.getGamepads();
+            const next = PAD_BUTTON_LABELS.map((_, i) =>
+                pads.some((pad) => isDown(pad?.buttons[i])),
+            );
             const key = next.map(Number).join('');
             if (key !== last) {
                 last = key;
@@ -34,15 +32,15 @@ export const PadHud = ({ id }: { id: string }) => {
         };
         raf = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(raf);
-    }, [id]);
+    }, [ids]);
 
     const held = PAD_BUTTON_LABELS.filter((_, i) => down[i]);
-    const shortId = id.replace(/\s*\(.*$/, '').trim() || id;
+    const names = ids.map(shortName).join(' · ');
 
     return (
         <div className="pad-hud" aria-live="polite">
             <div className="pad-hud__top">
-                <span className="pad-hud__name">{shortId}</span>
+                <span className="pad-hud__name">{names}</span>
                 <span className="pad-hud__held">
                     {held.length ? held.join(' · ') : 'apretá un botón'}
                 </span>

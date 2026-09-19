@@ -10,6 +10,7 @@ import {
 import { PadHud } from './PadHud.tsx';
 import { RtcStatsOverlay } from './RtcStats.tsx';
 import type { RtcStatsSnapshot } from '@/webrtc/stats.ts';
+import type { InputNeeds } from '@/webrtc/input.ts';
 
 const HIDE_DELAY_MS = 2400;
 
@@ -76,17 +77,35 @@ async function exitFullscreen(video: HTMLVideoElement | null) {
     if (v?.webkitDisplayingFullscreen) v.webkitExitFullscreen?.();
 }
 
+function inputHint(needs: InputNeeds, padIds: string[], pointerLocked: boolean): string | null {
+    const parts: string[] = [];
+    if (needs.gamepad > 0 && padIds.length === 0) {
+        parts.push(
+            needs.gamepad === 1
+                ? 'conectá un gamepad y apretá un botón'
+                : `conectá hasta ${needs.gamepad} gamepads`,
+        );
+    }
+    if (needs.keyboard) parts.push('teclado activo');
+    if (needs.mouse && !pointerLocked) parts.push('mouse sobre el video');
+    return parts.length ? parts.join(' · ') : null;
+}
+
 export const GameView = ({
     videoRef,
     hasTrack,
-    padId,
+    needs,
+    padIds,
+    pointerLocked,
     banner,
     actions,
     stats,
 }: {
     videoRef: RefObject<HTMLVideoElement | null>;
     hasTrack: boolean;
-    padId: string | null;
+    needs: InputNeeds;
+    padIds: string[];
+    pointerLocked: boolean;
     banner?: ReactNode;
     actions?: ReactNode;
     stats?: RtcStatsSnapshot | null;
@@ -169,10 +188,30 @@ export const GameView = ({
         void enterFullscreen(container, videoRef.current);
     };
 
+    const togglePointerLock = (event: MouseEvent) => {
+        event.stopPropagation();
+        const video = videoRef.current;
+        if (!video) return;
+        if (pointerLocked) {
+            document.exitPointerLock();
+            return;
+        }
+        void video.requestPointerLock();
+    };
+
+    const hint = hasTrack ? inputHint(needs, padIds, pointerLocked) : null;
+    const classes = [
+        'game-view',
+        controlsOn ? 'is-controls' : 'is-idle',
+        hasTrack ? 'has-track' : '',
+        needs.mouse ? 'has-mouse' : '',
+        pointerLocked ? 'is-locked' : '',
+    ].filter(Boolean).join(' ');
+
     return (
         <div
             ref={containerRef}
-            className={`game-view${controlsOn ? ' is-controls' : ' is-idle'}${hasTrack ? ' has-track' : ''}`}
+            className={classes}
             onMouseMove={() => showControls()}
             onPointerDown={() => showControls()}
             onMouseLeave={() => {
@@ -206,10 +245,8 @@ export const GameView = ({
                 </button>
             )}
             {hasTrack && <RtcStatsOverlay stats={stats ?? null} />}
-            {hasTrack && !padId && (
-                <p className="game-view__hint">conectá un gamepad y apretá un botón</p>
-            )}
-            {hasTrack && padId && <PadHud id={padId} />}
+            {hint && <p className="game-view__hint">{hint}</p>}
+            {hasTrack && padIds.length > 0 && <PadHud ids={padIds} />}
 
             {banner && <div className="game-view__banner">{banner}</div>}
 
@@ -220,6 +257,22 @@ export const GameView = ({
                 onMouseLeave={() => showControls()}
             >
                 <div className="game-view__actions">{actions}</div>
+                {needs.mouse && hasTrack && (
+                    <button
+                        type="button"
+                        className={`game-view__fs${pointerLocked ? ' is-on' : ''}`}
+                        onClick={togglePointerLock}
+                        aria-label={pointerLocked ? 'Liberar puntero' : 'Capturar puntero'}
+                        title={pointerLocked ? 'Liberar puntero' : 'Capturar puntero'}
+                    >
+                        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                            <path
+                                fill="currentColor"
+                                d="M5.5 3.2v16.3l4.2-4.1 2.5 6 2.2-.9-2.5-6h6.4L5.5 3.2z"
+                            />
+                        </svg>
+                    </button>
+                )}
                 <button
                     type="button"
                     className="game-view__fs"

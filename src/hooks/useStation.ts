@@ -12,6 +12,7 @@ import {
 import { attachWebrtc } from '@/webrtc/session.ts';
 import { StatusGameStation } from '@/types';
 import type { RtcStatsSnapshot } from '@/webrtc/stats.ts';
+import { normalizeNeeds, type InputNeeds } from '@/webrtc/input.ts';
 
 const MAX_LOGS = 120;
 
@@ -23,7 +24,9 @@ export const useStation = () => {
     const [error, setError] = useState<string | null>(null);
     const [logs, setLogs] = useState<string[]>([]);
     const [hasTrack, setHasTrack] = useState(false);
-    const [padId, setPadId] = useState<string | null>(null);
+    const [needs, setNeeds] = useState<InputNeeds>(() => normalizeNeeds(null));
+    const [padIds, setPadIds] = useState<string[]>([]);
+    const [pointerLocked, setPointerLocked] = useState(false);
     const [rtcStats, setRtcStats] = useState<RtcStatsSnapshot | null>(null);
     const [sessionId, setSessionId] = useState(newSessionId);
 
@@ -41,7 +44,8 @@ export const useStation = () => {
         const video = videoRef.current;
         if (video) video.srcObject = null;
         setHasTrack(false);
-        setPadId(null);
+        setPadIds([]);
+        setPointerLocked(false);
         setRtcStats(null);
     }, []);
 
@@ -49,6 +53,7 @@ export const useStation = () => {
         void getHealth()
             .then((data) => {
                 if (data.state) setStatus(data.state);
+                if (data.needs) setNeeds(normalizeNeeds(data.needs));
                 appendLog(`health ${data.state}`);
             })
             .catch(() => {
@@ -119,6 +124,8 @@ export const useStation = () => {
         setError(null);
         try {
             const launched = await launchStation(sessionId);
+            const inputNeeds = launched.needs ? normalizeNeeds(launched.needs) : needs;
+            if (launched.needs) setNeeds(inputNeeds);
             appendLog(`launch 200 game=${GAME_ID}`);
             const video = videoRef.current;
             if (!video) throw new Error('No hay elemento de video');
@@ -134,10 +141,12 @@ export const useStation = () => {
             peerCleanupRef.current = attachWebrtc({
                 signalPath: launched.wsUrl || '/ws/webrtc',
                 video,
+                needs: inputNeeds,
                 onTrack: (stream) => setHasTrack(Boolean(stream)),
                 onLog: appendLog,
                 onError: (code) => setError(stationErrorMessage(code)),
-                onPad: setPadId,
+                onPads: setPadIds,
+                onPointerLock: setPointerLocked,
                 onStats: setRtcStats,
             });
         } catch (err) {
@@ -175,7 +184,9 @@ export const useStation = () => {
         error,
         logs,
         hasTrack,
-        padId,
+        needs,
+        padIds,
+        pointerLocked,
         rtcStats,
         videoRef,
         prepare,

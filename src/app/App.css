@@ -99,13 +99,20 @@
     cursor: pointer;
     z-index: 0;
     color-scheme: only light;
+    outline: none;
 }
 
-.game-view.has-track.is-idle {
+.game-view.has-track.is-idle:not(.has-mouse),
+.game-view.has-track.is-idle:not(.has-mouse) video {
     cursor: none;
 }
 
-.game-view.has-track.is-idle video {
+.game-view.has-track.has-mouse video {
+    cursor: crosshair;
+}
+
+.game-view.has-track.is-locked,
+.game-view.has-track.is-locked video {
     cursor: none;
 }
 
@@ -349,6 +356,11 @@
 .game-view__fs:hover {
     border-color: rgba(56, 189, 248, 0.7);
     color: #fff;
+}
+
+.game-view__fs.is-on {
+    border-color: rgba(56, 189, 248, 0.7);
+    color: #7dd3fc;
 }
 
 .station-aside {

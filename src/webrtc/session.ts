@@ -1,19 +1,25 @@
 import { wsUrl } from '@services/api/urls.ts';
 import { attachGamepad } from '@/webrtc/gamepad.ts';
+import { attachKeyboard } from '@/webrtc/keyboard.ts';
+import { attachPointer } from '@/webrtc/pointer.ts';
+import { type InputNeeds, normalizeNeeds } from '@/webrtc/input.ts';
 import { createPeer, type SignalIn } from '@/webrtc/peer.ts';
 import { readRtcStats, type RtcStatsSnapshot } from '@/webrtc/stats.ts';
 
 export function attachWebrtc(opts: {
     signalPath: string;
     video: HTMLVideoElement;
+    needs?: InputNeeds | null;
     onTrack: (stream: MediaStream | null) => void;
     onLog: (line: string) => void;
     onError: (code: string) => void;
-    onPad?: (id: string | null) => void;
+    onPads?: (ids: string[]) => void;
+    onPointerLock?: (locked: boolean) => void;
     onStats?: (stats: RtcStatsSnapshot) => void;
 }) {
+    const needs = normalizeNeeds(opts.needs);
     const ws = new WebSocket(wsUrl(opts.signalPath));
-    let detachPad: (() => void) | null = null;
+    let detachInput: (() => void) | null = null;
     const peer = createPeer({
         send: (msg) => {
             if (ws.readyState !== WebSocket.OPEN) return;
@@ -31,6 +37,7 @@ export function attachWebrtc(opts: {
             video.autoplay = true;
             video.setAttribute('playsinline', 'true');
             video.setAttribute('webkit-playsinline', 'true');
+            video.tabIndex = 0;
             video.srcObject = stream;
             const play = () => {
                 void video.play().then(
@@ -68,15 +75,43 @@ export function attachWebrtc(opts: {
     }, 1000);
 
     peer.input.onopen = () => {
-        opts.onLog('dc input open');
-        detachPad = attachGamepad({
-            channel: peer.input,
-            onPad: (id) => {
-                opts.onLog(id ? `gamepad ${id}` : 'gamepad desconectado');
-                opts.onPad?.(id);
-            },
-            onPadEvent: (line) => opts.onLog(line),
-        });
+        opts.onLog(
+            `dc input open pads=${needs.gamepad} keyboard=${needs.keyboard} mouse=${needs.mouse}`,
+        );
+        const stop: Array<() => void> = [];
+        if (needs.gamepad > 0) {
+            stop.push(
+                attachGamepad({
+                    channel: peer.input,
+                    maxPads: needs.gamepad,
+                    onPads: (ids) => {
+                        opts.onLog(
+                            ids.length
+                                ? `gamepad ${ids.join(' · ')}`
+                                : 'gamepad desconectado',
+                        );
+                        opts.onPads?.(ids);
+                    },
+                    onPadEvent: (line) => opts.onLog(line),
+                }),
+            );
+        }
+        if (needs.keyboard) {
+            stop.push(attachKeyboard({ channel: peer.input, onLog: opts.onLog }));
+        }
+        if (needs.mouse) {
+            stop.push(
+                attachPointer({
+                    channel: peer.input,
+                    video: opts.video,
+                    onLock: opts.onPointerLock,
+                    onLog: opts.onLog,
+                }),
+            );
+        }
+        detachInput = () => {
+            while (stop.length) stop.pop()?.();
+        };
     };
 
     ws.onmessage = async (ev) => {
@@ -84,8 +119,8 @@ export function attachWebrtc(opts: {
         opts.onLog(`← ${msg.type}${msg.type === 'ERROR' ? ` ${msg.code}` : ''}`);
         if (msg.type === 'ERROR') {
             opts.onError(msg.code);
-            detachPad?.();
-            detachPad = null;
+            detachInput?.();
+            detachInput = null;
             peer.close();
             ws.close();
             return;
@@ -101,9 +136,10 @@ export function attachWebrtc(opts: {
 
     return () => {
         window.clearInterval(statsTimer);
-        detachPad?.();
-        detachPad = null;
-        opts.onPad?.(null);
+        detachInput?.();
+        detachInput = null;
+        opts.onPads?.([]);
+        opts.onPointerLock?.(false);
         peer.close();
         ws.close();
         opts.video.srcObject = null;

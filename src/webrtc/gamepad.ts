@@ -45,32 +45,42 @@ function axisInt(v: number, unipolar = false): number {
     return Math.round(Math.max(-1, Math.min(1, v)) * AXIS_MAX);
 }
 
+type Slot = {
+    prevBtn: boolean[];
+    prevAxis: number[];
+};
+
+function emptySlot(): Slot {
+    return { prevBtn: [], prevAxis: [] };
+}
+
 export function attachGamepad(opts: {
     channel: RTCDataChannel;
-    onPad?: (id: string | null) => void;
+    maxPads: 0 | 1 | 2 | 3 | 4;
+    onPads?: (ids: string[]) => void;
     onPadEvent?: (line: string) => void;
 }) {
+    const maxPads = opts.maxPads;
+    if (maxPads === 0) {
+        return () => undefined;
+    }
     let raf = 0;
-    let index: number | null = null;
-    const prevBtn: boolean[] = [];
-    const prevAxis: number[] = [];
+    const slots: Slot[] = Array.from({ length: maxPads }, emptySlot);
+    const ids: (string | null)[] = Array.from({ length: maxPads }, () => null);
 
-    const pick = () => {
-        const pads = navigator.getGamepads();
-        for (const pad of pads) {
-            if (pad) return pad;
-        }
-        return null;
+    const emitPads = () => {
+        opts.onPads?.(ids.filter((id): id is string => Boolean(id)));
     };
 
-    const flushNeutral = () => {
+    const flushSlot = (slot: number) => {
+        const prev = slots[slot];
         for (let i = 0; i < 17; i++) {
-            if (prevBtn[i]) sendBuf(opts.channel, encodePadButton(ACTION_UP, i));
-            prevBtn[i] = false;
+            if (prev.prevBtn[i]) sendBuf(opts.channel, encodePadButton(ACTION_UP, i, slot));
+            prev.prevBtn[i] = false;
         }
         for (let i = 0; i < 6; i++) {
-            if (prevAxis[i]) sendBuf(opts.channel, encodePadAxis(i, 0));
-            prevAxis[i] = 0;
+            if (prev.prevAxis[i]) sendBuf(opts.channel, encodePadAxis(i, 0, slot));
+            prev.prevAxis[i] = 0;
         }
     };
 
@@ -78,64 +88,69 @@ export function attachGamepad(opts: {
         raf = requestAnimationFrame(poll);
         if (opts.channel.readyState !== 'open') return;
         const pads = navigator.getGamepads();
-        const pad = (index != null ? pads[index] : null) ?? pick();
-        if (!pad) {
-            if (index != null) {
-                index = null;
-                opts.onPad?.(null);
-                flushNeutral();
+        let changed = false;
+        for (let slot = 0; slot < maxPads; slot++) {
+            const pad = pads[slot];
+            if (!pad) {
+                if (ids[slot]) {
+                    ids[slot] = null;
+                    flushSlot(slot);
+                    changed = true;
+                }
+                continue;
             }
-            return;
-        }
-        if (index !== pad.index) {
-            index = pad.index;
-            opts.onPad?.(pad.id);
-        }
-        const n = Math.min(PAD_BUTTON_LABELS.length, pad.buttons.length);
-        for (let i = 0; i < n; i++) {
-            const down = buttonDown(pad.buttons[i]);
-            if (down !== Boolean(prevBtn[i])) {
-                const sent = sendBuf(
-                    opts.channel,
-                    encodePadButton(down ? ACTION_DOWN : ACTION_UP, i),
-                );
-                prevBtn[i] = down;
-                const label = PAD_BUTTON_LABELS[i];
-                opts.onPadEvent?.(
-                    sent
-                        ? `pad ${label} ${down ? 'down' : 'up'}`
-                        : `pad ${label} ${down ? 'down' : 'up'} (dc cerrado)`,
-                );
+            if (ids[slot] !== pad.id) {
+                ids[slot] = pad.id;
+                changed = true;
+            }
+            const prev = slots[slot];
+            const n = Math.min(PAD_BUTTON_LABELS.length, pad.buttons.length);
+            for (let i = 0; i < n; i++) {
+                const down = buttonDown(pad.buttons[i]);
+                if (down !== Boolean(prev.prevBtn[i])) {
+                    const sent = sendBuf(
+                        opts.channel,
+                        encodePadButton(down ? ACTION_DOWN : ACTION_UP, i, slot),
+                    );
+                    prev.prevBtn[i] = down;
+                    const label = PAD_BUTTON_LABELS[i];
+                    const who = maxPads > 1 ? `P${slot + 1} ` : '';
+                    opts.onPadEvent?.(
+                        sent
+                            ? `${who}pad ${label} ${down ? 'down' : 'up'}`
+                            : `${who}pad ${label} ${down ? 'down' : 'up'} (dc cerrado)`,
+                    );
+                }
+            }
+            const stick = [
+                axisInt(pad.axes[0] ?? 0),
+                axisInt(pad.axes[1] ?? 0),
+                axisInt(pad.axes[2] ?? 0),
+                axisInt(pad.axes[3] ?? 0),
+                axisInt(pad.buttons[6]?.value ?? 0, true),
+                axisInt(pad.buttons[7]?.value ?? 0, true),
+            ];
+            for (let i = 0; i < 6; i++) {
+                const cur = stick[i];
+                const old = prev.prevAxis[i] ?? 0;
+                if (Math.abs(cur - old) >= AXIS_EPS || (cur === 0 && old !== 0)) {
+                    sendBuf(opts.channel, encodePadAxis(i, cur, slot));
+                    prev.prevAxis[i] = cur;
+                }
             }
         }
-        const stick = [
-            axisInt(pad.axes[0] ?? 0),
-            axisInt(pad.axes[1] ?? 0),
-            axisInt(pad.axes[2] ?? 0),
-            axisInt(pad.axes[3] ?? 0),
-            axisInt(pad.buttons[6]?.value ?? 0, true),
-            axisInt(pad.buttons[7]?.value ?? 0, true),
-        ];
-        for (let i = 0; i < 6; i++) {
-            const cur = stick[i];
-            const old = prevAxis[i] ?? 0;
-            if (Math.abs(cur - old) >= AXIS_EPS || (cur === 0 && old !== 0)) {
-                sendBuf(opts.channel, encodePadAxis(i, cur));
-                prevAxis[i] = cur;
-            }
-        }
+        if (changed) emitPads();
     };
 
-    const onConnected = (ev: GamepadEvent) => {
+    const onConnected = () => {
         void navigator.getGamepads();
-        index = ev.gamepad.index;
-        opts.onPad?.(ev.gamepad.id);
     };
     const onDisconnected = (ev: GamepadEvent) => {
-        if (index === ev.gamepad.index) {
-            index = null;
-            opts.onPad?.(null);
-            flushNeutral();
+        const slot = ev.gamepad.index;
+        if (slot >= 0 && slot < maxPads && ids[slot]) {
+            ids[slot] = null;
+            flushSlot(slot);
+            emitPads();
         }
     };
 
@@ -147,6 +162,8 @@ export function attachGamepad(opts: {
         cancelAnimationFrame(raf);
         window.removeEventListener('gamepadconnected', onConnected);
         window.removeEventListener('gamepaddisconnected', onDisconnected);
-        flushNeutral();
+        for (let slot = 0; slot < maxPads; slot++) flushSlot(slot);
+        ids.fill(null);
+        emitPads();
     };
 }
