@@ -122,12 +122,14 @@ function shortLabel(ev: KeyboardEvent): string {
 
 export function attachKeyboard(opts: {
     onKeys?: (held: string[]) => void;
+    onChange?: () => void;
     onLog?: (line: string) => void;
 }) {
     const down = new Map<number, string>();
 
     const emit = () => {
         opts.onKeys?.([...down.values()]);
+        opts.onChange?.();
     };
 
     const onDown = (ev: KeyboardEvent) => {

@@ -1,4 +1,4 @@
-/** Tick 120 Hz: fotografía de controles + historial de supervivencia. */
+/** Tick 250 Hz: el más nuevo gana. Un solo datagrama en vuelo. */
 
 import { attachGamepad, type PadSample } from './gamepad.ts';
 import { attachKeyboard } from './keyboard.ts';
@@ -8,7 +8,7 @@ import type { InputNeeds } from './input.ts';
 import type { MouseHud } from './pointer.ts';
 import { HISTORY, encodeDatagram, sendDatagram, type Snapshot } from './snapshot.ts';
 
-const TICK_MS = 1000 / 120;
+const TICK_MS = 4;
 
 type WireSnapshot = Snapshot & { tx: boolean };
 
@@ -36,10 +36,12 @@ export function startInput(opts: {
     let stopped = false;
     const history: WireSnapshot[] = [];
     const frames = attachFrameClock(opts.video);
+    const runtime = { pulse: (_force = false) => undefined as void };
 
     const keyboard = needs.keyboard
         ? attachKeyboard({
             onKeys: opts.onKeys,
+            onChange: () => runtime.pulse(true),
             onLog: opts.onLog,
         })
         : null;
@@ -48,6 +50,7 @@ export function startInput(opts: {
             video: opts.video,
             onMouse: opts.onMouse,
             onLock: opts.onLock,
+            onChange: () => runtime.pulse(true),
             onLog: opts.onLog,
         })
         : null;
@@ -62,7 +65,7 @@ export function startInput(opts: {
     if (!needs.mouse) opts.onLog?.('mouse desactivado por needs.mouse=false');
     if (needs.gamepad === 0) opts.onLog?.('gamepad desactivado por needs.gamepad=0');
     opts.onLog?.(
-        `input udp tick=120Hz history=${HISTORY} pads=${needs.gamepad} keyboard=${needs.keyboard} mouse=${needs.mouse}`,
+        `input udp tick=250Hz latest-wins history=${HISTORY} pads=${needs.gamepad} keyboard=${needs.keyboard} mouse=${needs.mouse}`,
     );
 
     const sample = (): Snapshot => {
@@ -98,13 +101,16 @@ export function startInput(opts: {
         history.push(item);
     };
 
-    const tick = () => {
+    const tick = (force = false) => {
         if (stopped || channel.readyState !== 'open') return;
         push(sample());
+        if (!force && channel.bufferedAmount > 0) return;
         if (sendDatagram(channel, encodeDatagram(history))) {
             for (const snap of history) snap.tx = true;
         }
     };
+
+    runtime.pulse = tick;
 
     const rest = (): Snapshot => {
         seq = (seq + 1) & 0xffff;
@@ -117,12 +123,21 @@ export function startInput(opts: {
         };
     };
 
-    tick();
-    const timer = window.setInterval(tick, TICK_MS);
+    const onLow = () => {
+        if (stopped || channel.readyState !== 'open' || history.length === 0) return;
+        if (sendDatagram(channel, encodeDatagram(history))) {
+            for (const snap of history) snap.tx = true;
+        }
+    };
+
+    tick(true);
+    const timer = window.setInterval(() => tick(false), TICK_MS);
+    channel.addEventListener('bufferedamountlow', onLow);
 
     return () => {
         stopped = true;
         window.clearInterval(timer);
+        channel.removeEventListener('bufferedamountlow', onLow);
         if (channel.readyState === 'open') {
             sendDatagram(channel, encodeDatagram([rest()]));
         }

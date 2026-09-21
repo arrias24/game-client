@@ -47,6 +47,7 @@ export function attachPointer(opts: {
     video: HTMLVideoElement;
     onMouse?: (state: MouseHud | null) => void;
     onLock?: (locked: boolean) => void;
+    onChange?: () => void;
     onLog?: (line: string) => void;
 }) {
     const held = new Set<number>();
@@ -87,6 +88,7 @@ export function attachPointer(opts: {
             dy = 0;
         }
         emitHud(true);
+        opts.onChange?.();
     };
 
     const onDown = (ev: PointerEvent | MouseEvent) => {
@@ -96,6 +98,7 @@ export function attachPointer(opts: {
         const pt = mapVideoCoords(opts.video, ev.clientX, ev.clientY);
         if (pt) lastPt = pt;
         emitHud(true);
+        opts.onChange?.();
         ev.preventDefault();
     };
 
@@ -104,6 +107,7 @@ export function attachPointer(opts: {
         if (!held.has(ev.button)) return;
         held.delete(ev.button);
         emitHud(true);
+        opts.onChange?.();
         ev.preventDefault();
     };
 
@@ -128,6 +132,7 @@ export function attachPointer(opts: {
         const ticks = ev.deltaY === 0 ? 0 : ev.deltaY < 0 ? 1 : -1;
         if (!ticks) return;
         wheel += ticks;
+        opts.onChange?.();
         ev.preventDefault();
     };
 

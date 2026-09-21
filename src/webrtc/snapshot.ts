@@ -2,7 +2,7 @@
 
 export const MAGIC = 0xa7;
 export const VERSION = 3;
-export const HISTORY = 4;
+export const HISTORY = 2;
 export const FLAG_MOUSE = 1 << 0;
 export const FLAG_MOUSE_ABS = 1 << 1;
 export const FLAG_KEYBOARD = 1 << 2;
@@ -104,7 +104,7 @@ function writeSnapshot(view: DataView, off: number, snap: Snapshot): number {
 
 export function sendDatagram(channel: RTCDataChannel | null, buf: ArrayBuffer): boolean {
     if (!channel || channel.readyState !== 'open') return false;
-    if (channel.bufferedAmount > 4096) return false;
+    if (channel.bufferedAmount > 0) return false;
     try {
         channel.send(buf);
         return true;
