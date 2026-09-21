@@ -1,8 +1,7 @@
 import { wsUrl } from '@services/api/urls.ts';
-import { attachGamepad } from '@/webrtc/gamepad.ts';
-import { attachKeyboard } from '@/webrtc/keyboard.ts';
-import { attachPointer, type MouseHud } from '@/webrtc/pointer.ts';
 import { type InputNeeds, normalizeNeeds } from '@/webrtc/input.ts';
+import { type MouseHud } from '@/webrtc/pointer.ts';
+import { startInput } from '@/webrtc/pump.ts';
 import { createPeer, type SignalIn } from '@/webrtc/peer.ts';
 import { readRtcStats, type RtcStatsSnapshot } from '@/webrtc/stats.ts';
 
@@ -79,52 +78,23 @@ export function attachWebrtc(opts: {
 
     peer.input.onopen = () => {
         opts.onLog(
-            `dc input open pads=${needs.gamepad} keyboard=${needs.keyboard} mouse=${needs.mouse}`,
+            `dc input open unreliable pads=${needs.gamepad} keyboard=${needs.keyboard} mouse=${needs.mouse}`,
         );
-        const stop: Array<() => void> = [];
-        if (needs.gamepad > 0) {
-            stop.push(
-                attachGamepad({
-                    channel: peer.input,
-                    maxPads: needs.gamepad,
-                    onPads: (ids) => {
-                        opts.onLog(
-                            ids.length
-                                ? `gamepad ${ids.join(' · ')}`
-                                : 'gamepad desconectado',
-                        );
-                        opts.onPads?.(ids);
-                    },
-                }),
-            );
-        }
-        if (needs.keyboard) {
-            stop.push(
-                attachKeyboard({
-                    channel: peer.input,
-                    onKeys: opts.onKeys,
-                    onLog: opts.onLog,
-                }),
-            );
-        } else {
-            opts.onLog('teclado desactivado por needs.keyboard=false');
-        }
-        if (needs.mouse) {
-            stop.push(
-                attachPointer({
-                    channel: peer.input,
-                    video: opts.video,
-                    onMouse: opts.onMouse,
-                    onLock: opts.onPointerLock,
-                    onLog: opts.onLog,
-                }),
-            );
-        } else {
-            opts.onLog('mouse desactivado por needs.mouse=false');
-        }
-        detachInput = () => {
-            while (stop.length) stop.pop()?.();
-        };
+        detachInput = startInput({
+            channel: peer.input,
+            video: opts.video,
+            needs,
+            onPads: (ids) => {
+                opts.onLog(
+                    ids.length ? `gamepad ${ids.join(' · ')}` : 'gamepad desconectado',
+                );
+                opts.onPads?.(ids);
+            },
+            onKeys: opts.onKeys,
+            onMouse: opts.onMouse,
+            onLock: opts.onPointerLock,
+            onLog: opts.onLog,
+        });
     };
 
     ws.onmessage = async (ev) => {

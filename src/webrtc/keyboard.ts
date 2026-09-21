@@ -1,6 +1,4 @@
-/** KeyboardEvent.code → Linux KEY_* (wire `type=1`). */
-
-import { ACTION_DOWN, ACTION_UP, encodeKey, sendBuf } from './input.ts';
+/** KeyboardEvent.code → Linux KEY_*. El pump lee el estado; acá no se envía. */
 
 const KEY: Record<string, number> = {
     Escape: 1,
@@ -123,7 +121,6 @@ function shortLabel(ev: KeyboardEvent): string {
 }
 
 export function attachKeyboard(opts: {
-    channel: RTCDataChannel;
     onKeys?: (held: string[]) => void;
     onLog?: (line: string) => void;
 }) {
@@ -133,20 +130,14 @@ export function attachKeyboard(opts: {
         opts.onKeys?.([...down.values()]);
     };
 
-    const send = (action: 1 | 2, code: number) => {
-        sendBuf(opts.channel, encodeKey(action, code), true);
-    };
-
     const onDown = (ev: KeyboardEvent) => {
         if (ev.repeat || isTypingTarget(ev.target)) return;
         const code = KEY[ev.code];
         if (!code) return;
         ev.preventDefault();
         if (down.has(code)) return;
-        const label = shortLabel(ev);
-        down.set(code, label);
+        down.set(code, shortLabel(ev));
         emit();
-        send(ACTION_DOWN, code);
     };
 
     const onUp = (ev: KeyboardEvent) => {
@@ -154,14 +145,11 @@ export function attachKeyboard(opts: {
         if (!code || !down.has(code)) return;
         down.delete(code);
         emit();
-        send(ACTION_UP, code);
         if (!isTypingTarget(ev.target)) ev.preventDefault();
     };
 
     const flush = () => {
-        for (const code of down.keys()) {
-            sendBuf(opts.channel, encodeKey(ACTION_UP, code), true);
-        }
+        if (down.size === 0) return;
         down.clear();
         emit();
     };
@@ -171,11 +159,14 @@ export function attachKeyboard(opts: {
     window.addEventListener('blur', flush);
     opts.onLog?.('teclado listo — clickeá el video y escribí');
 
-    return () => {
-        window.removeEventListener('keydown', onDown, true);
-        window.removeEventListener('keyup', onUp, true);
-        window.removeEventListener('blur', flush);
-        flush();
-        opts.onKeys?.([]);
+    return {
+        codes: () => [...down.keys()],
+        stop: () => {
+            window.removeEventListener('keydown', onDown, true);
+            window.removeEventListener('keyup', onUp, true);
+            window.removeEventListener('blur', flush);
+            down.clear();
+            opts.onKeys?.([]);
+        },
     };
 }

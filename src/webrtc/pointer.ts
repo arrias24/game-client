@@ -1,16 +1,16 @@
-import {
-    ACTION_DOWN,
-    ACTION_UP,
-    encodePointerButton,
-    encodePointerMove,
-    encodePointerWheel,
-    sendBuf,
-} from './input.ts';
-
 export type MouseHud = {
     x: number;
     y: number;
     buttons: number;
+    locked: boolean;
+};
+
+export type MouseSample = {
+    abs: boolean;
+    x: number;
+    y: number;
+    buttons: number;
+    wheel: number;
     locked: boolean;
 };
 
@@ -44,7 +44,6 @@ function isChrome(target: EventTarget | null): boolean {
 }
 
 export function attachPointer(opts: {
-    channel: RTCDataChannel;
     video: HTMLVideoElement;
     onMouse?: (state: MouseHud | null) => void;
     onLock?: (locked: boolean) => void;
@@ -54,7 +53,16 @@ export function attachPointer(opts: {
     let locked = false;
     let lastHud = 0;
     let lastPt = { x: 0, y: 0 };
+    let dx = 0;
+    let dy = 0;
+    let wheel = 0;
     const root: HTMLElement = opts.video.closest('.game-view') ?? opts.video;
+
+    const buttonMask = () => {
+        let mask = 0;
+        for (const button of held) mask |= 1 << button;
+        return mask;
+    };
 
     const emitHud = (force = false) => {
         const now = performance.now();
@@ -68,32 +76,23 @@ export function attachPointer(opts: {
         });
     };
 
-    const sendButton = (action: 1 | 2, button: number) => {
-        sendBuf(opts.channel, encodePointerButton(action, button), true);
-    };
-
-    const flushButtons = () => {
-        for (const button of held) {
-            sendBuf(opts.channel, encodePointerButton(ACTION_UP, button), true);
-        }
-        held.clear();
-        emitHud(true);
-    };
-
     const onLockChange = () => {
         locked =
             document.pointerLockElement === opts.video
             || document.pointerLockElement === root;
         opts.onLock?.(locked);
-        if (!locked) flushButtons();
-        else emitHud(true);
+        if (!locked) {
+            held.clear();
+            dx = 0;
+            dy = 0;
+        }
+        emitHud(true);
     };
 
     const onDown = (ev: PointerEvent | MouseEvent) => {
         if (isChrome(ev.target) || ev.button > 4) return;
         opts.video.focus();
         held.add(ev.button);
-        sendButton(ACTION_DOWN, ev.button);
         const pt = mapVideoCoords(opts.video, ev.clientX, ev.clientY);
         if (pt) lastPt = pt;
         emitHud(true);
@@ -104,28 +103,23 @@ export function attachPointer(opts: {
         if (ev.button > 4) return;
         if (!held.has(ev.button)) return;
         held.delete(ev.button);
-        sendButton(ACTION_UP, ev.button);
         emitHud(true);
         ev.preventDefault();
     };
 
-    const onMove = (ev: PointerEvent | MouseEvent) => {
-        if (opts.channel.readyState !== 'open') return;
+    const onMove = (ev: Event) => {
+        const pe = ev as PointerEvent;
         if (locked) {
-            const dx = ev.movementX | 0;
-            const dy = ev.movementY | 0;
-            if (dx || dy) {
-                lastPt = { x: lastPt.x + dx, y: lastPt.y + dy };
-                sendBuf(opts.channel, encodePointerMove(dx, dy, false), true);
-                emitHud();
-            }
+            dx += pe.movementX;
+            dy += pe.movementY;
+            lastPt = { x: lastPt.x + (pe.movementX || 0), y: lastPt.y + (pe.movementY || 0) };
+            emitHud();
             return;
         }
-        if (isChrome(ev.target)) return;
-        const pt = mapVideoCoords(opts.video, ev.clientX, ev.clientY);
+        if (isChrome(pe.target)) return;
+        const pt = mapVideoCoords(opts.video, pe.clientX, pe.clientY);
         if (!pt) return;
         lastPt = pt;
-        sendBuf(opts.channel, encodePointerMove(pt.x, pt.y, true), true);
         emitHud();
     };
 
@@ -133,7 +127,7 @@ export function attachPointer(opts: {
         if (isChrome(ev.target)) return;
         const ticks = ev.deltaY === 0 ? 0 : ev.deltaY < 0 ? 1 : -1;
         if (!ticks) return;
-        sendBuf(opts.channel, encodePointerWheel(ticks), true);
+        wheel += ticks;
         ev.preventDefault();
     };
 
@@ -147,9 +141,14 @@ export function attachPointer(opts: {
         ev.stopPropagation();
     };
 
+    const moveEvent =
+        typeof window !== 'undefined' && 'onpointerrawupdate' in window
+            ? 'pointerrawupdate'
+            : 'pointermove';
+
     root.addEventListener('pointerdown', onDown);
     window.addEventListener('pointerup', onUp);
-    root.addEventListener('pointermove', onMove);
+    root.addEventListener(moveEvent, onMove, { passive: true });
     root.addEventListener('wheel', onWheel, { passive: false });
     root.addEventListener('contextmenu', onContext);
     root.addEventListener('dblclick', onDblClick, true);
@@ -157,19 +156,54 @@ export function attachPointer(opts: {
     opts.onLog?.('mouse listo — mové el puntero sobre el video');
     opts.onMouse?.({ x: 0, y: 0, buttons: 0, locked: false });
 
-    return () => {
-        root.removeEventListener('pointerdown', onDown);
-        window.removeEventListener('pointerup', onUp);
-        root.removeEventListener('pointermove', onMove);
-        root.removeEventListener('wheel', onWheel);
-        root.removeEventListener('contextmenu', onContext);
-        root.removeEventListener('dblclick', onDblClick, true);
-        document.removeEventListener('pointerlockchange', onLockChange);
-        if (document.pointerLockElement === opts.video || document.pointerLockElement === root) {
-            document.exitPointerLock();
-        }
-        flushButtons();
-        opts.onLock?.(false);
-        opts.onMouse?.(null);
+    return {
+        peek: (): MouseSample => {
+            if (locked) {
+                return {
+                    abs: false,
+                    x: Math.round(dx),
+                    y: Math.round(dy),
+                    buttons: buttonMask(),
+                    wheel: wheel | 0,
+                    locked,
+                };
+            }
+            return {
+                abs: true,
+                x: lastPt.x,
+                y: lastPt.y,
+                buttons: buttonMask(),
+                wheel: wheel | 0,
+                locked,
+            };
+        },
+        consumeMotion: () => {
+            if (locked) {
+                const ix = Math.max(-32767, Math.min(32767, Math.round(dx)));
+                const iy = Math.max(-32767, Math.min(32767, Math.round(dy)));
+                dx -= ix;
+                dy -= iy;
+            }
+            const w = Math.max(-8, Math.min(8, wheel | 0));
+            wheel -= w;
+        },
+        stop: () => {
+            root.removeEventListener('pointerdown', onDown);
+            window.removeEventListener('pointerup', onUp);
+            root.removeEventListener(moveEvent, onMove);
+            root.removeEventListener('wheel', onWheel);
+            root.removeEventListener('contextmenu', onContext);
+            root.removeEventListener('dblclick', onDblClick, true);
+            document.removeEventListener('pointerlockchange', onLockChange);
+            if (document.pointerLockElement === opts.video || document.pointerLockElement === root) {
+                document.exitPointerLock();
+            }
+            held.clear();
+            dx = 0;
+            dy = 0;
+            wheel = 0;
+            opts.onLock?.(false);
+            opts.onMouse?.(null);
+        },
     };
 }

@@ -61,6 +61,8 @@ export function createPeer(opts: {
         ordered: false,
         maxRetransmits: 0,
     });
+    input.binaryType = 'arraybuffer';
+    input.bufferedAmountLowThreshold = 0;
     const remote = new MediaStream();
     pc.addTransceiver('video', { direction: 'recvonly' });
     pc.addTransceiver('audio', { direction: 'recvonly' });
