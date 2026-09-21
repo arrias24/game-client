@@ -116,7 +116,7 @@ export function attachPointer(opts: {
             const dy = ev.movementY | 0;
             if (dx || dy) {
                 lastPt = { x: lastPt.x + dx, y: lastPt.y + dy };
-                sendBuf(opts.channel, encodePointerMove(dx, dy, false));
+                sendBuf(opts.channel, encodePointerMove(dx, dy, false), true);
                 emitHud();
             }
             return;
@@ -125,7 +125,7 @@ export function attachPointer(opts: {
         const pt = mapVideoCoords(opts.video, ev.clientX, ev.clientY);
         if (!pt) return;
         lastPt = pt;
-        sendBuf(opts.channel, encodePointerMove(pt.x, pt.y, true));
+        sendBuf(opts.channel, encodePointerMove(pt.x, pt.y, true), true);
         emitHud();
     };
 
@@ -133,7 +133,7 @@ export function attachPointer(opts: {
         if (isChrome(ev.target)) return;
         const ticks = ev.deltaY === 0 ? 0 : ev.deltaY < 0 ? 1 : -1;
         if (!ticks) return;
-        sendBuf(opts.channel, encodePointerWheel(ticks));
+        sendBuf(opts.channel, encodePointerWheel(ticks), true);
         ev.preventDefault();
     };
 

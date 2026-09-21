@@ -30,6 +30,7 @@ export const PAD_BUTTON_LABELS = [
 const DEADZONE = 0.12;
 const AXIS_EPS = 256;
 const AXIS_MAX = 32767;
+const POLL_MS = 4;
 
 function buttonDown(button: GamepadButton | undefined): boolean {
     if (!button) return false;
@@ -63,7 +64,7 @@ export function attachGamepad(opts: {
     if (maxPads === 0) {
         return () => undefined;
     }
-    let raf = 0;
+    let timer = 0;
     const slots: Slot[] = Array.from({ length: maxPads }, emptySlot);
     const ids: (string | null)[] = Array.from({ length: maxPads }, () => null);
 
@@ -84,7 +85,6 @@ export function attachGamepad(opts: {
     };
 
     const poll = () => {
-        raf = requestAnimationFrame(poll);
         if (opts.channel.readyState !== 'open') return;
         const connected = [...navigator.getGamepads()]
             .filter((pad): pad is Gamepad => pad != null)
@@ -147,10 +147,11 @@ export function attachGamepad(opts: {
 
     window.addEventListener('gamepadconnected', onConnected);
     window.addEventListener('gamepaddisconnected', onDisconnected);
-    raf = requestAnimationFrame(poll);
+    poll();
+    timer = window.setInterval(poll, POLL_MS);
 
     return () => {
-        cancelAnimationFrame(raf);
+        window.clearInterval(timer);
         window.removeEventListener('gamepadconnected', onConnected);
         window.removeEventListener('gamepaddisconnected', onDisconnected);
         for (let slot = 0; slot < maxPads; slot++) flushSlot(slot);
