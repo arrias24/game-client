@@ -69,17 +69,12 @@ export function attachPointer(opts: {
     };
 
     const sendButton = (action: 1 | 2, button: number) => {
-        const sent = sendBuf(opts.channel, encodePointerButton(action, button));
-        opts.onLog?.(
-            sent
-                ? `mouse ${action === ACTION_DOWN ? 'down' : 'up'} b${button}`
-                : `mouse b${button} (dc cerrado)`,
-        );
+        sendBuf(opts.channel, encodePointerButton(action, button), true);
     };
 
     const flushButtons = () => {
         for (const button of held) {
-            sendBuf(opts.channel, encodePointerButton(ACTION_UP, button));
+            sendBuf(opts.channel, encodePointerButton(ACTION_UP, button), true);
         }
         held.clear();
         emitHud(true);

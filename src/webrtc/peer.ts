@@ -27,21 +27,50 @@ function iceServers(): RTCIceServer[] {
         .map((urls) => ({ urls }));
 }
 
+function tuneReceiver(receiver: RTCRtpReceiver) {
+    const ext = receiver as RTCRtpReceiver & { playoutDelayHint?: number };
+    try {
+        if ('jitterBufferTarget' in receiver) {
+            receiver.jitterBufferTarget = 0;
+        }
+    } catch {
+        /* Safari / Firefox viejo */
+    }
+    try {
+        ext.playoutDelayHint = 0;
+    } catch {
+        /* no soportado */
+    }
+    const track = receiver.track;
+    if (track?.kind === 'video') {
+        try {
+            track.contentHint = 'motion';
+        } catch {
+            /* no soportado */
+        }
+    }
+}
+
 export function createPeer(opts: {
     onTrack: (stream: MediaStream) => void;
     send: (msg: SignalOut) => void;
     onState?: (s: string) => void;
 }) {
     const pc = new RTCPeerConnection({ iceServers: iceServers() });
-    const input = pc.createDataChannel('input', { ordered: true });
+    const input = pc.createDataChannel('input', {
+        ordered: false,
+        maxRetransmits: 0,
+    });
     const remote = new MediaStream();
     pc.addTransceiver('video', { direction: 'recvonly' });
     pc.addTransceiver('audio', { direction: 'recvonly' });
+    for (const receiver of pc.getReceivers()) tuneReceiver(receiver);
 
     pc.onconnectionstatechange = () => opts.onState?.(`pc ${pc.connectionState}`);
     pc.oniceconnectionstatechange = () => opts.onState?.(`ice ${pc.iceConnectionState}`);
 
     pc.ontrack = (ev) => {
+        tuneReceiver(ev.receiver);
         if (!remote.getTracks().some((t) => t.id === ev.track.id)) {
             remote.addTrack(ev.track);
         }

@@ -58,7 +58,6 @@ export function attachGamepad(opts: {
     channel: RTCDataChannel;
     maxPads: 0 | 1 | 2 | 3 | 4;
     onPads?: (ids: string[]) => void;
-    onPadEvent?: (line: string) => void;
 }) {
     const maxPads = opts.maxPads;
     if (maxPads === 0) {
@@ -75,11 +74,11 @@ export function attachGamepad(opts: {
     const flushSlot = (slot: number) => {
         const prev = slots[slot];
         for (let i = 0; i < 17; i++) {
-            if (prev.prevBtn[i]) sendBuf(opts.channel, encodePadButton(ACTION_UP, i, slot));
+            if (prev.prevBtn[i]) sendBuf(opts.channel, encodePadButton(ACTION_UP, i, slot), true);
             prev.prevBtn[i] = false;
         }
         for (let i = 0; i < 6; i++) {
-            if (prev.prevAxis[i]) sendBuf(opts.channel, encodePadAxis(i, 0, slot));
+            if (prev.prevAxis[i]) sendBuf(opts.channel, encodePadAxis(i, 0, slot), true);
             prev.prevAxis[i] = 0;
         }
     };
@@ -111,18 +110,12 @@ export function attachGamepad(opts: {
             for (let i = 0; i < n; i++) {
                 const down = buttonDown(pad.buttons[i]);
                 if (down !== Boolean(prev.prevBtn[i])) {
-                    const sent = sendBuf(
+                    sendBuf(
                         opts.channel,
                         encodePadButton(down ? ACTION_DOWN : ACTION_UP, i, slot),
+                        true,
                     );
                     prev.prevBtn[i] = down;
-                    const label = PAD_BUTTON_LABELS[i];
-                    const who = maxPads > 1 ? `P${slot + 1} ` : '';
-                    opts.onPadEvent?.(
-                        sent
-                            ? `${who}pad ${label} ${down ? 'down' : 'up'}`
-                            : `${who}pad ${label} ${down ? 'down' : 'up'} (dc cerrado)`,
-                    );
                 }
             }
             const stick = [

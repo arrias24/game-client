@@ -12,6 +12,18 @@ export const POINTER_ABS = 1;
 export const MAX_PADS = 4;
 
 const AXIS_MAX = 32767;
+const MAX_BUFFERED = 256;
+
+export function sendBuf(
+    channel: RTCDataChannel | null,
+    buf: ArrayBuffer | null,
+    urgent = false,
+) {
+    if (!buf || !channel || channel.readyState !== 'open') return false;
+    if (!urgent && channel.bufferedAmount > MAX_BUFFERED) return false;
+    channel.send(buf);
+    return true;
+}
 
 export type GamepadSlots = 0 | 1 | 2 | 3 | 4;
 
@@ -103,10 +115,4 @@ export function encodePointerMove(x: number, y: number, absolute: boolean): Arra
 
 export function encodePointerWheel(ticks: number): ArrayBuffer {
     return packet(POINTER_TYPE, ACTION_AXIS, 0, ticks | 0);
-}
-
-export function sendBuf(channel: RTCDataChannel | null, buf: ArrayBuffer | null) {
-    if (!buf || !channel || channel.readyState !== 'open') return false;
-    channel.send(buf);
-    return true;
 }

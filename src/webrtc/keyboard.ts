@@ -133,13 +133,8 @@ export function attachKeyboard(opts: {
         opts.onKeys?.([...down.values()]);
     };
 
-    const send = (action: 1 | 2, code: number, label: string) => {
-        const sent = sendBuf(opts.channel, encodeKey(action, code));
-        opts.onLog?.(
-            sent
-                ? `key ${label} ${action === ACTION_DOWN ? 'down' : 'up'}`
-                : `key ${label} (dc cerrado)`,
-        );
+    const send = (action: 1 | 2, code: number) => {
+        sendBuf(opts.channel, encodeKey(action, code), true);
     };
 
     const onDown = (ev: KeyboardEvent) => {
@@ -151,23 +146,21 @@ export function attachKeyboard(opts: {
         const label = shortLabel(ev);
         down.set(code, label);
         emit();
-        send(ACTION_DOWN, code, label);
+        send(ACTION_DOWN, code);
     };
 
     const onUp = (ev: KeyboardEvent) => {
         const code = KEY[ev.code];
         if (!code || !down.has(code)) return;
-        const label = down.get(code) ?? shortLabel(ev);
         down.delete(code);
         emit();
-        send(ACTION_UP, code, label);
+        send(ACTION_UP, code);
         if (!isTypingTarget(ev.target)) ev.preventDefault();
     };
 
     const flush = () => {
-        for (const [code, label] of down) {
-            sendBuf(opts.channel, encodeKey(ACTION_UP, code));
-            opts.onLog?.(`key ${label} up`);
+        for (const code of down.keys()) {
+            sendBuf(opts.channel, encodeKey(ACTION_UP, code), true);
         }
         down.clear();
         emit();

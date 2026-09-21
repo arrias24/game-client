@@ -95,7 +95,6 @@ export function attachWebrtc(opts: {
                         );
                         opts.onPads?.(ids);
                     },
-                    onPadEvent: (line) => opts.onLog(line),
                 }),
             );
         }
