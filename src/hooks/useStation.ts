@@ -34,6 +34,7 @@ export const useStation = () => {
     const [sessionId, setSessionId] = useState(newSessionId);
 
     const videoRef = useRef<HTMLVideoElement | null>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
     const peerCleanupRef = useRef<(() => void) | null>(null);
 
     const appendLog = useCallback((line: string) => {
@@ -46,6 +47,11 @@ export const useStation = () => {
         peerCleanupRef.current = null;
         const video = videoRef.current;
         if (video) video.srcObject = null;
+        const audio = audioRef.current;
+        if (audio) {
+            audio.pause();
+            audio.srcObject = null;
+        }
         setHasTrack(false);
         setPadIds([]);
         setHeldKeys([]);
@@ -142,22 +148,29 @@ export const useStation = () => {
                 `launch 200 game=${GAME_ID} pads=${inputNeeds.gamepad} keyboard=${inputNeeds.keyboard} mouse=${inputNeeds.mouse}`,
             );
             const video = videoRef.current;
+            const audio = audioRef.current;
             if (!video) throw new Error('No hay elemento de video');
+            if (!audio) throw new Error('No hay elemento de audio');
             closePeer();
             video.muted = false;
             video.playsInline = true;
             video.tabIndex = 0;
             (document.activeElement as HTMLElement | null)?.blur();
             video.focus();
+            audio.muted = false;
             void video.play().catch(() => {
                 video.muted = true;
                 void video.play().catch(() => {
                     /* gesto de Jugar: desbloquea autoplay en Safari/HTTP */
                 });
             });
+            void audio.play().catch(() => {
+                audio.muted = true;
+            });
             peerCleanupRef.current = attachWebrtc({
                 signalPath: launched.wsUrl || '/ws/webrtc',
                 video,
+                audio,
                 needs: inputNeeds,
                 onTrack: (stream) => setHasTrack(Boolean(stream)),
                 onLog: appendLog,
@@ -210,6 +223,7 @@ export const useStation = () => {
         pointerLocked,
         rtcStats,
         videoRef,
+        audioRef,
         prepare,
         launch,
         stop,

@@ -74,6 +74,10 @@
     overflow: hidden;
 }
 
+.game-view > audio {
+    display: none;
+}
+
 @supports (container-type: size) {
     .station-stage {
         container-type: size;

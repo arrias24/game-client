@@ -13,6 +13,8 @@ export const RtcStatsOverlay = ({ stats }: { stats: RtcStatsSnapshot | null }) =
             <span>A {fmt(stats.audioKbps, ' kb/s')}</span>
             <span>{fmt(stats.fps, ' fps')}</span>
             <span>RTT {fmt(stats.rttMs, ' ms')}</span>
+            <span>Vj {fmt(stats.videoJitterMs, ' ms')}</span>
+            <span>Aj {fmt(stats.audioJitterMs, ' ms')}</span>
             <span>lost {fmt(stats.lost, '')}</span>
         </div>
     );

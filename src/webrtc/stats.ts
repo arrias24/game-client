@@ -4,15 +4,29 @@ export type RtcStatsSnapshot = {
     rttMs: number | null;
     fps: number | null;
     lost: number | null;
+    videoJitterMs: number | null;
+    audioJitterMs: number | null;
 };
+
+type InboundDelay = RTCInboundRtpStreamStats & {
+    jitterBufferDelay?: number;
+    jitterBufferEmittedCount?: number;
+};
+
+function bufferMs(stat: InboundDelay | undefined): number | null {
+    const delay = stat?.jitterBufferDelay;
+    const count = stat?.jitterBufferEmittedCount;
+    if (typeof delay !== 'number' || typeof count !== 'number' || count <= 0) return null;
+    return Math.round((delay / count) * 1000);
+}
 
 function inbound(
     stats: RTCStatsReport,
     kind: 'video' | 'audio',
-): RTCInboundRtpStreamStats | undefined {
+): InboundDelay | undefined {
     for (const item of stats.values()) {
         if (item.type === 'inbound-rtp' && item.kind === kind) {
-            return item as RTCInboundRtpStreamStats;
+            return item as InboundDelay;
         }
     }
     return undefined;
@@ -47,6 +61,8 @@ export async function readRtcStats(
             rttMs,
             fps,
             lost: prev ? lost : null,
+            videoJitterMs: bufferMs(video),
+            audioJitterMs: bufferMs(audio),
         },
         next: { at: now, video: videoBytes, audio: audioBytes },
     };

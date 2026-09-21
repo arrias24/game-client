@@ -94,6 +94,7 @@ function inputHint(needs: InputNeeds, padIds: string[], pointerLocked: boolean):
 
 export const GameView = ({
     videoRef,
+    audioRef,
     hasTrack,
     needs,
     padIds,
@@ -105,6 +106,7 @@ export const GameView = ({
     stats,
 }: {
     videoRef: RefObject<HTMLVideoElement | null>;
+    audioRef: RefObject<HTMLAudioElement | null>;
     hasTrack: boolean;
     needs: InputNeeds;
     padIds: string[];
@@ -157,29 +159,47 @@ export const GameView = ({
 
     useEffect(() => {
         const video = videoRef.current;
+        const audio = audioRef.current;
         if (!hasTrack || !video) {
             setMuted(true);
             return;
         }
         video.muted = false;
+        if (audio) audio.muted = false;
         void video.play().then(
             () => setMuted(false),
             () => {
                 video.muted = true;
+                if (audio) audio.muted = true;
                 setMuted(true);
             },
         );
-    }, [hasTrack, videoRef]);
+        if (audio) {
+            void audio.play().catch(() => {
+                audio.muted = true;
+                setMuted(true);
+            });
+        }
+    }, [hasTrack, videoRef, audioRef]);
 
     const unmute = () => {
         const video = videoRef.current;
+        const audio = audioRef.current;
         if (!video) return;
         video.muted = false;
+        if (audio) audio.muted = false;
         setMuted(false);
         void video.play().catch(() => {
             video.muted = true;
+            if (audio) audio.muted = true;
             setMuted(true);
         });
+        if (audio) {
+            void audio.play().catch(() => {
+                audio.muted = true;
+                setMuted(true);
+            });
+        }
     };
 
     const toggleFullscreen = (event: MouseEvent) => {
@@ -240,6 +260,7 @@ export const GameView = ({
                 onClick={needs.mouse ? undefined : unmute}
                 onDoubleClick={needs.mouse ? undefined : toggleFullscreen}
             />
+            <audio ref={audioRef} autoPlay />
             {!hasTrack && (
                 <div className="game-view__placeholder">pantalla de juego</div>
             )}

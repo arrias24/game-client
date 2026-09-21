@@ -8,6 +8,7 @@ import { readRtcStats, type RtcStatsSnapshot } from '@/webrtc/stats.ts';
 export function attachWebrtc(opts: {
     signalPath: string;
     video: HTMLVideoElement;
+    audio: HTMLAudioElement;
     needs?: InputNeeds | null;
     onTrack: (stream: MediaStream | null) => void;
     onLog: (line: string) => void;
@@ -28,19 +29,26 @@ export function attachWebrtc(opts: {
             ws.send(JSON.stringify(msg));
         },
         onTrack: (stream) => {
-            const videoTrack = stream.getVideoTracks()[0];
-            const audioTrack = stream.getAudioTracks()[0];
+            const picture = new MediaStream(stream.getVideoTracks());
+            const sound = new MediaStream(stream.getAudioTracks());
+            const videoTrack = picture.getVideoTracks()[0];
+            const audioTrack = sound.getAudioTracks()[0];
             opts.onLog(
-                `ontrack video=${videoTrack?.readyState ?? 'none'} audio=${audioTrack?.readyState ?? 'none'}`,
+                `ontrack video=${videoTrack?.readyState ?? 'none'} audio=${audioTrack?.readyState ?? 'none'} av_sync=split`,
             );
             const video = opts.video;
+            const audio = opts.audio;
             video.playsInline = true;
             video.autoplay = true;
             video.setAttribute('playsinline', 'true');
             video.setAttribute('webkit-playsinline', 'true');
             video.tabIndex = 0;
             video.focus();
-            video.srcObject = stream;
+            video.srcObject = picture;
+            audio.autoplay = true;
+            audio.setAttribute('playsinline', 'true');
+            audio.srcObject = sound;
+            audio.muted = video.muted;
             const play = () => {
                 void video.play().then(
                     () => {
@@ -51,6 +59,10 @@ export function attachWebrtc(opts: {
                     () => {
                         opts.onLog('autoplay blocked — click the video');
                     },
+                );
+                void audio.play().then(
+                    () => opts.onLog(`audio play muted=${audio.muted}`),
+                    () => opts.onLog('audio play blocked'),
                 );
             };
             video.onloadedmetadata = play;
@@ -68,6 +80,11 @@ export function attachWebrtc(opts: {
     });
 
     peer.input.binaryType = 'arraybuffer';
+    const mirrorMute = () => {
+        opts.audio.muted = opts.video.muted;
+        if (!opts.video.muted) void opts.audio.play().catch(() => undefined);
+    };
+    opts.video.addEventListener('volumechange', mirrorMute);
     let prevStats: { at: number; video: number; audio: number } | null = null;
     const statsTimer = window.setInterval(() => {
         void readRtcStats(peer.pc, prevStats).then(({ snap, next }) => {
@@ -119,6 +136,7 @@ export function attachWebrtc(opts: {
 
     return () => {
         window.clearInterval(statsTimer);
+        opts.video.removeEventListener('volumechange', mirrorMute);
         detachInput?.();
         detachInput = null;
         opts.onPads?.([]);
@@ -128,6 +146,8 @@ export function attachWebrtc(opts: {
         peer.close();
         ws.close();
         opts.video.srcObject = null;
+        opts.audio.pause();
+        opts.audio.srcObject = null;
         opts.onTrack(null);
     };
 }

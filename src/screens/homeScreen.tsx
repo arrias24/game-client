@@ -19,6 +19,7 @@ export const HomeScreen = () => {
         pointerLocked,
         rtcStats,
         videoRef,
+        audioRef,
         prepare,
         launch,
         stop,
@@ -44,6 +45,7 @@ export const HomeScreen = () => {
                     <section className="station-stage" aria-label="Video">
                         <GameView
                             videoRef={videoRef}
+                            audioRef={audioRef}
                             hasTrack={hasTrack}
                             needs={needs}
                             padIds={padIds}
