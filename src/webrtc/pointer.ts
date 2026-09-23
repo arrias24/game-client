@@ -43,8 +43,14 @@ function isChrome(target: EventTarget | null): boolean {
     );
 }
 
+function isOnVideo(video: HTMLVideoElement, target: EventTarget | null): boolean {
+    return target === video || (target instanceof Node && video.contains(target));
+}
+
 export function attachPointer(opts: {
     video: HTMLVideoElement;
+    /** Juegos con look SDL (Xonotic): pedir pointer lock al apretar en el video. */
+    captureLook?: boolean;
     onMouse?: (state: MouseHud | null) => void;
     onLock?: (locked: boolean) => void;
     onChange?: () => void;
@@ -70,17 +76,64 @@ export function attachPointer(opts: {
         if (!force && now - lastHud < 50) return;
         lastHud = now;
         opts.onMouse?.({
-            x: lastPt.x,
-            y: lastPt.y,
+            x: locked ? dx : lastPt.x,
+            y: locked ? dy : lastPt.y,
             buttons: held.size,
             locked,
         });
     };
 
+    const requestLock = () => {
+        if (locked || document.pointerLockElement) return;
+        const target = opts.video;
+        const done = () => opts.onLog?.('pointer lock activo — mové el mouse');
+        const fail = (err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            opts.onLog?.(`pointer lock falló: ${msg} (click de nuevo en el video)`);
+        };
+        if (target.requestPointerLock) {
+            void target.requestPointerLock().then(done).catch(fail);
+            return;
+        }
+        const legacy = target as HTMLVideoElement & {
+            mozRequestPointerLock?: () => void;
+            webkitRequestPointerLock?: () => void;
+        };
+        legacy.mozRequestPointerLock?.();
+        legacy.webkitRequestPointerLock?.();
+    };
+
+    const onLockedMove = (ev: Event) => {
+        const pe = ev as PointerEvent;
+        dx += pe.movementX || 0;
+        dy += pe.movementY || 0;
+        lastPt = {
+            x: lastPt.x + (pe.movementX || 0),
+            y: lastPt.y + (pe.movementY || 0),
+        };
+        emitHud();
+        opts.onChange?.();
+    };
+
+    const bindLockedMove = (on: boolean) => {
+        if (on) {
+            document.addEventListener('pointermove', onLockedMove, { capture: true, passive: true });
+            document.addEventListener('mousemove', onLockedMove, { capture: true, passive: true });
+        } else {
+            document.removeEventListener('pointermove', onLockedMove, { capture: true });
+            document.removeEventListener('mousemove', onLockedMove, { capture: true });
+        }
+    };
+
     const onLockChange = () => {
-        locked =
+        const nowLocked =
             document.pointerLockElement === opts.video
             || document.pointerLockElement === root;
+        if (nowLocked !== locked) {
+            locked = nowLocked;
+            bindLockedMove(locked);
+            opts.onLog?.(locked ? 'pointer lock ON' : 'pointer lock OFF');
+        }
         opts.onLock?.(locked);
         if (!locked) {
             held.clear();
@@ -97,6 +150,13 @@ export function attachPointer(opts: {
         held.add(ev.button);
         const pt = mapVideoCoords(opts.video, ev.clientX, ev.clientY);
         if (pt) lastPt = pt;
+        if (
+            opts.captureLook
+            && ev.button === 0
+            && isOnVideo(opts.video, ev.target)
+        ) {
+            requestLock();
+        }
         emitHud(true);
         opts.onChange?.();
         ev.preventDefault();
@@ -112,15 +172,8 @@ export function attachPointer(opts: {
     };
 
     const onMove = (ev: Event) => {
+        if (locked) return;
         const pe = ev as PointerEvent;
-        if (locked) {
-            dx += pe.movementX;
-            dy += pe.movementY;
-            lastPt = { x: lastPt.x + (pe.movementX || 0), y: lastPt.y + (pe.movementY || 0) };
-            emitHud();
-            opts.onChange?.();
-            return;
-        }
         if (isChrome(pe.target)) return;
         const pt = mapVideoCoords(opts.video, pe.clientX, pe.clientY);
         if (!pt) return;
@@ -160,7 +213,13 @@ export function attachPointer(opts: {
     root.addEventListener('contextmenu', onContext);
     root.addEventListener('dblclick', onDblClick, true);
     document.addEventListener('pointerlockchange', onLockChange);
-    opts.onLog?.('mouse listo — mové el puntero sobre el video');
+    document.addEventListener('mozpointerlockchange', onLockChange);
+    document.addEventListener('webkitpointerlockchange', onLockChange);
+    opts.onLog?.(
+        opts.captureLook
+            ? 'mouse listo — click en el video para capturar el puntero (cámara)'
+            : 'mouse listo — mové el puntero sobre el video',
+    );
     opts.onMouse?.({ x: 0, y: 0, buttons: 0, locked: false });
 
     return {
@@ -194,7 +253,9 @@ export function attachPointer(opts: {
             const w = Math.max(-8, Math.min(8, wheel | 0));
             wheel -= w;
         },
+        requestLock,
         stop: () => {
+            bindLockedMove(false);
             root.removeEventListener('pointerdown', onDown);
             window.removeEventListener('pointerup', onUp);
             root.removeEventListener(moveEvent, onMove);
@@ -202,6 +263,8 @@ export function attachPointer(opts: {
             root.removeEventListener('contextmenu', onContext);
             root.removeEventListener('dblclick', onDblClick, true);
             document.removeEventListener('pointerlockchange', onLockChange);
+            document.removeEventListener('mozpointerlockchange', onLockChange);
+            document.removeEventListener('webkitpointerlockchange', onLockChange);
             if (document.pointerLockElement === opts.video || document.pointerLockElement === root) {
                 document.exitPointerLock();
             }

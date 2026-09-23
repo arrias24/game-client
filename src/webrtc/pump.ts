@@ -48,6 +48,7 @@ export function startInput(opts: {
     const pointer = needs.mouse
         ? attachPointer({
             video: opts.video,
+            captureLook: Boolean(needs.relativeMouse),
             onMouse: opts.onMouse,
             onLock: opts.onLock,
             onChange: () => runtime.pulse(true),
@@ -65,7 +66,7 @@ export function startInput(opts: {
     if (!needs.mouse) opts.onLog?.('mouse desactivado por needs.mouse=false');
     if (needs.gamepad === 0) opts.onLog?.('gamepad desactivado por needs.gamepad=0');
     opts.onLog?.(
-        `input udp tick=250Hz latest-wins history=${HISTORY} pads=${needs.gamepad} keyboard=${needs.keyboard} mouse=${needs.mouse}`,
+        `input udp tick=250Hz latest-wins history=${HISTORY} pads=${needs.gamepad} keyboard=${needs.keyboard} mouse=${needs.mouse} relativeMouse=${Boolean(needs.relativeMouse)}`,
     );
 
     const sample = (): Snapshot => {

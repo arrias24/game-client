@@ -156,7 +156,7 @@ export const useStation = () => {
             const inputNeeds = launched.needs ? normalizeNeeds(launched.needs) : needs;
             if (launched.needs) setNeeds(inputNeeds);
             appendLog(
-                `launch 200 game=${GAME_ID} pads=${inputNeeds.gamepad} keyboard=${inputNeeds.keyboard} mouse=${inputNeeds.mouse}`,
+                `launch 200 game=${GAME_ID} pads=${inputNeeds.gamepad} keyboard=${inputNeeds.keyboard} mouse=${inputNeeds.mouse} relativeMouse=${Boolean(inputNeeds.relativeMouse)}`,
             );
             if (!video) throw new Error('No hay elemento de video');
             if (!audio) throw new Error('No hay elemento de audio');

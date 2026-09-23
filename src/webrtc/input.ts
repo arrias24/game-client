@@ -4,6 +4,8 @@ export type InputNeeds = {
     gamepad: GamepadSlots;
     keyboard: boolean;
     mouse: boolean;
+    /** Manifiesto Xonotic: look vía deltas relativos (pointer lock recomendado). */
+    relativeMouse?: boolean;
 };
 
 export function normalizeNeeds(
@@ -11,6 +13,7 @@ export function normalizeNeeds(
         gamepad?: number | boolean;
         keyboard?: boolean;
         mouse?: boolean;
+        relativeMouse?: boolean;
     } | null,
 ): InputNeeds {
     if (!raw) {
@@ -30,5 +33,6 @@ export function normalizeNeeds(
         gamepad,
         keyboard: Boolean(raw.keyboard),
         mouse: Boolean(raw.mouse),
+        relativeMouse: Boolean(raw.relativeMouse),
     };
 }
