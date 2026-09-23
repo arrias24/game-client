@@ -48,7 +48,7 @@ export function startInput(opts: {
     const pointer = needs.mouse
         ? attachPointer({
             video: opts.video,
-            captureLook: Boolean(needs.relativeMouse),
+            lookMode: Boolean(needs.relativeMouse),
             onMouse: opts.onMouse,
             onLock: opts.onLock,
             onChange: () => runtime.pulse(),
@@ -71,7 +71,7 @@ export function startInput(opts: {
 
     const sample = (): Snapshot => {
         seq = (seq + 1) & 0xffff;
-        const mouse = pointer?.peek();
+        const mouse = pointer?.takeDelta();
         const keys = (keyboard?.codes() ?? []).slice().sort((a, b) => a - b);
         const pads: PadSample[] = gamepad?.sample() ?? [];
         return {
@@ -93,9 +93,10 @@ export function startInput(opts: {
 
     const flush = (): boolean => {
         if (!sendDatagram(channel, encodeDatagram(history))) {
+            pointer?.restoreLastDelta();
+            if (history.length > 0) history.pop();
             return false;
         }
-        pointer?.consumeMotion();
         for (const snap of history) snap.tx = true;
         return true;
     };

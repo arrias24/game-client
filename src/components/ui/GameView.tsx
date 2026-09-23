@@ -212,15 +212,6 @@ export const GameView = ({
         void target.requestPointerLock({ unadjustedMovement: true });
     };
 
-    const capturePointer = (event: MouseEvent) => {
-        event.stopPropagation();
-        const container = containerRef.current;
-        const video = videoRef.current;
-        if ((!container && !video) || pointerLocked) return;
-        const target = container ?? video!;
-        void target.requestPointerLock({ unadjustedMovement: true });
-    };
-
     const hint = hasTrack ? inputHint(needs, padIds, pointerLocked) : null;
     const classes = [
         'game-view',
@@ -254,7 +245,7 @@ export const GameView = ({
                 controls={false}
                 width={1280}
                 height={720}
-                onClick={needs.mouse ? capturePointer : unmute}
+                onClick={unmute}
                 onDoubleClick={needs.mouse ? undefined : toggleFullscreen}
             />
             <audio ref={audioRef} autoPlay />
