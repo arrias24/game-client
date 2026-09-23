@@ -74,7 +74,7 @@ export function startInput(opts: {
         const mouse = pointer?.peek();
         const keys = (keyboard?.codes() ?? []).slice().sort((a, b) => a - b);
         const pads: PadSample[] = gamepad?.sample() ?? [];
-        const snap: Snapshot = {
+        return {
             seq,
             frameId: frames.current(),
             mouse: needs.mouse && mouse
@@ -89,8 +89,15 @@ export function startInput(opts: {
             keys: needs.keyboard ? keys : undefined,
             pads: needs.gamepad > 0 ? pads : undefined,
         };
+    };
+
+    const flush = (): boolean => {
+        if (!sendDatagram(channel, encodeDatagram(history))) {
+            return false;
+        }
         pointer?.consumeMotion();
-        return snap;
+        for (const snap of history) snap.tx = true;
+        return true;
     };
 
     const push = (snap: Snapshot) => {
@@ -105,9 +112,7 @@ export function startInput(opts: {
     const tick = () => {
         if (stopped || channel.readyState !== 'open') return;
         push(sample());
-        if (sendDatagram(channel, encodeDatagram(history))) {
-            for (const snap of history) snap.tx = true;
-        }
+        flush();
     };
 
     runtime.pulse = () => tick();
@@ -125,9 +130,7 @@ export function startInput(opts: {
 
     const onLow = () => {
         if (stopped || channel.readyState !== 'open' || history.length === 0) return;
-        if (sendDatagram(channel, encodeDatagram(history))) {
-            for (const snap of history) snap.tx = true;
-        }
+        flush();
     };
 
     tick();
