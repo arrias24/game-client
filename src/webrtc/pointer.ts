@@ -118,6 +118,7 @@ export function attachPointer(opts: {
             dy += pe.movementY;
             lastPt = { x: lastPt.x + (pe.movementX || 0), y: lastPt.y + (pe.movementY || 0) };
             emitHud();
+            opts.onChange?.();
             return;
         }
         if (isChrome(pe.target)) return;
@@ -125,6 +126,7 @@ export function attachPointer(opts: {
         if (!pt) return;
         lastPt = pt;
         emitHud();
+        opts.onChange?.();
     };
 
     const onWheel = (ev: WheelEvent) => {

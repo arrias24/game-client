@@ -5,6 +5,51 @@ import { startInput } from '@/webrtc/pump.ts';
 import { createPeer, type SignalIn } from '@/webrtc/peer.ts';
 import { readRtcStats, type RtcStatsSnapshot } from '@/webrtc/stats.ts';
 
+function bindStream(
+    video: HTMLVideoElement,
+    audio: HTMLAudioElement,
+    picture: MediaStream,
+    sound: MediaStream,
+    onLog: (line: string) => void,
+) {
+    video.playsInline = true;
+    video.autoplay = true;
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('webkit-playsinline', 'true');
+    video.tabIndex = 0;
+    video.focus();
+    if (video.srcObject !== picture) {
+        video.srcObject = picture;
+    }
+    audio.autoplay = true;
+    audio.setAttribute('playsinline', 'true');
+    if (audio.srcObject !== sound) {
+        audio.srcObject = sound;
+    }
+    video.muted = false;
+    audio.muted = false;
+    const play = () => {
+        void video.play().then(
+            () => onLog(`video play ${video.videoWidth}x${video.videoHeight} muted=${video.muted}`),
+            (err) => onLog(`video play ${err instanceof Error ? err.message : err}`),
+        );
+        void audio.play().then(
+            () => onLog(`audio play muted=${audio.muted}`),
+            (err) => onLog(`audio play ${err instanceof Error ? err.message : err}`),
+        );
+    };
+    video.onloadedmetadata = play;
+    video.onplaying = () => {
+        onLog(`video playing ${video.videoWidth}x${video.videoHeight}`);
+    };
+    const videoTrack = picture.getVideoTracks()[0];
+    if (videoTrack) {
+        videoTrack.onunmute = () => onLog('track unmute');
+        videoTrack.onmute = () => onLog('track mute');
+    }
+    play();
+}
+
 export function attachWebrtc(opts: {
     signalPath: string;
     video: HTMLVideoElement;
@@ -22,6 +67,9 @@ export function attachWebrtc(opts: {
     const needs = normalizeNeeds(opts.needs);
     const ws = new WebSocket(wsUrl(opts.signalPath));
     let detachInput: (() => void) | null = null;
+    const picture = new MediaStream();
+    const sound = new MediaStream();
+    let avBound = false;
     const peer = createPeer({
         send: (msg) => {
             if (ws.readyState !== WebSocket.OPEN) return;
@@ -29,52 +77,31 @@ export function attachWebrtc(opts: {
             ws.send(JSON.stringify(msg));
         },
         onTrack: (stream) => {
-            const picture = new MediaStream(stream.getVideoTracks());
-            const sound = new MediaStream(stream.getAudioTracks());
+            for (const track of stream.getVideoTracks()) {
+                if (!picture.getTracks().some((t) => t.id === track.id)) {
+                    picture.addTrack(track);
+                }
+            }
+            for (const track of stream.getAudioTracks()) {
+                if (!sound.getTracks().some((t) => t.id === track.id)) {
+                    sound.addTrack(track);
+                }
+            }
             const videoTrack = picture.getVideoTracks()[0];
             const audioTrack = sound.getAudioTracks()[0];
             opts.onLog(
                 `ontrack video=${videoTrack?.readyState ?? 'none'} audio=${audioTrack?.readyState ?? 'none'} av_sync=split`,
             );
-            const video = opts.video;
-            const audio = opts.audio;
-            video.playsInline = true;
-            video.autoplay = true;
-            video.setAttribute('playsinline', 'true');
-            video.setAttribute('webkit-playsinline', 'true');
-            video.tabIndex = 0;
-            video.focus();
-            video.srcObject = picture;
-            audio.autoplay = true;
-            audio.setAttribute('playsinline', 'true');
-            audio.srcObject = sound;
-            audio.muted = video.muted;
-            const play = () => {
-                void video.play().then(
-                    () => {
-                        opts.onLog(
-                            `video play ${video.videoWidth}x${video.videoHeight} muted=${video.muted}`,
-                        );
-                    },
-                    () => {
-                        opts.onLog('autoplay blocked — click the video');
-                    },
-                );
-                void audio.play().then(
-                    () => opts.onLog(`audio play muted=${audio.muted}`),
-                    () => opts.onLog('audio play blocked'),
-                );
-            };
-            video.onloadedmetadata = play;
-            video.onplaying = () => {
-                opts.onLog(`video playing ${video.videoWidth}x${video.videoHeight}`);
-            };
-            if (videoTrack) {
-                videoTrack.onunmute = () => opts.onLog('track unmute');
-                videoTrack.onmute = () => opts.onLog('track mute');
+            if (!avBound && (videoTrack || audioTrack)) {
+                avBound = true;
+                bindStream(opts.video, opts.audio, picture, sound, opts.onLog);
+            } else if (audioTrack && sound.getAudioTracks().length === 1) {
+                if (opts.audio.srcObject !== sound) {
+                    opts.audio.srcObject = sound;
+                }
+                void opts.audio.play().catch(() => undefined);
             }
-            play();
-            opts.onTrack(stream);
+            opts.onTrack(new MediaStream([...picture.getTracks(), ...sound.getTracks()]));
         },
         onState: (s) => opts.onLog(s),
     });
@@ -114,18 +141,21 @@ export function attachWebrtc(opts: {
         });
     };
 
-    ws.onmessage = async (ev) => {
+    let signalChain = Promise.resolve();
+    ws.onmessage = (ev) => {
         const msg = JSON.parse(String(ev.data)) as SignalIn;
         opts.onLog(`← ${msg.type}${msg.type === 'ERROR' ? ` ${msg.code}` : ''}`);
-        if (msg.type === 'ERROR') {
-            opts.onError(msg.code);
-            detachInput?.();
-            detachInput = null;
-            peer.close();
-            ws.close();
-            return;
-        }
-        await peer.onSignal(msg);
+        signalChain = signalChain.then(async () => {
+            if (msg.type === 'ERROR') {
+                opts.onError(msg.code);
+                detachInput?.();
+                detachInput = null;
+                peer.close();
+                ws.close();
+                return;
+            }
+            await peer.onSignal(msg);
+        });
     };
 
     ws.onopen = () => {

@@ -13,9 +13,13 @@ export type SignalIn =
 export type SignalOut = { type: 'OFFER'; sdp: string } | IceMsg;
 
 function iceFromStation(msg: IceMsg): RTCIceCandidateInit {
-    const raw = msg.candidate ?? '';
-    const candidate = raw.startsWith('candidate:') ? raw.slice('candidate:'.length) : raw;
-    return { candidate, sdpMid: msg.sdpMid, sdpMLineIndex: msg.sdpMLineIndex };
+    let raw = (msg.candidate ?? '').trim();
+    if (raw.startsWith('a=')) raw = raw.slice(2).trim();
+    if (raw && !raw.startsWith('candidate:')) raw = `candidate:${raw}`;
+    const init: RTCIceCandidateInit = { candidate: raw };
+    if (msg.sdpMid) init.sdpMid = msg.sdpMid;
+    if (msg.sdpMLineIndex != null && msg.sdpMLineIndex >= 0) init.sdpMLineIndex = msg.sdpMLineIndex;
+    return init;
 }
 
 function iceServers(): RTCIceServer[] {
@@ -27,24 +31,43 @@ function iceServers(): RTCIceServer[] {
         .map((urls) => ({ urls }));
 }
 
-function tuneReceiver(receiver: RTCRtpReceiver) {
-    const ext = receiver as RTCRtpReceiver & { playoutDelayHint?: number };
-    try {
-        if ('jitterBufferTarget' in receiver) {
-            receiver.jitterBufferTarget = 0;
-        }
-    } catch {
-        /* Safari / Firefox viejo */
-    }
-    try {
-        ext.playoutDelayHint = 0;
-    } catch {
-        /* no soportado */
-    }
+/** Colchón corto: suaviza microcortes sin el retraso de 60 ms. */
+const PLAYOUT_S = 0.035;
+const JITTER_MS = 35;
+
+function tuneReceiver(receiver: RTCRtpReceiver, log?: (line: string) => void) {
+    const ext = receiver as RTCRtpReceiver & { playoutDelayHint?: number; jitterBufferTarget?: number };
     const track = receiver.track;
     if (track?.kind === 'video') {
         try {
-            track.contentHint = 'motion';
+            if ('jitterBufferTarget' in receiver) {
+                ext.jitterBufferTarget = JITTER_MS;
+            }
+        } catch (err) {
+            log?.(`jitter ${err instanceof Error ? err.message : err}`);
+        }
+        try {
+            ext.playoutDelayHint = PLAYOUT_S;
+        } catch (err) {
+            log?.(`playout ${err instanceof Error ? err.message : err}`);
+        }
+    } else {
+        try {
+            if ('jitterBufferTarget' in receiver) {
+                ext.jitterBufferTarget = 0;
+            }
+        } catch {
+            /* no soportado */
+        }
+        try {
+            ext.playoutDelayHint = 0;
+        } catch {
+            /* no soportado */
+        }
+    }
+    if (receiver.track?.kind === 'video') {
+        try {
+            receiver.track.contentHint = 'motion';
         } catch {
             /* no soportado */
         }
@@ -68,11 +91,17 @@ export function createPeer(opts: {
     pc.addTransceiver('audio', { direction: 'recvonly' });
     for (const receiver of pc.getReceivers()) tuneReceiver(receiver);
 
-    pc.onconnectionstatechange = () => opts.onState?.(`pc ${pc.connectionState}`);
+    const tuneAll = () => {
+        for (const receiver of pc.getReceivers()) tuneReceiver(receiver, opts.onState);
+    };
+    pc.onconnectionstatechange = () => {
+        opts.onState?.(`pc ${pc.connectionState}`);
+        if (pc.connectionState === 'connected') tuneAll();
+    };
     pc.oniceconnectionstatechange = () => opts.onState?.(`ice ${pc.iceConnectionState}`);
 
     pc.ontrack = (ev) => {
-        tuneReceiver(ev.receiver);
+        tuneReceiver(ev.receiver, opts.onState);
         if (!remote.getTracks().some((t) => t.id === ev.track.id)) {
             remote.addTrack(ev.track);
         }
@@ -105,8 +134,8 @@ export function createPeer(opts: {
         if (msg.type === 'ICE' && msg.candidate) {
             try {
                 await pc.addIceCandidate(iceFromStation(msg));
-            } catch {
-                opts.onState?.('ICE candidate rejected');
+            } catch (err) {
+                opts.onState?.(`ICE candidate rejected ${err instanceof Error ? err.message : err}`);
             }
         }
     }

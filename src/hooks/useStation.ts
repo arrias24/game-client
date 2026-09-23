@@ -138,6 +138,17 @@ export const useStation = () => {
     };
 
     const launch = async () => {
+        const video = videoRef.current;
+        const audio = audioRef.current;
+        if (video) {
+            video.muted = false;
+            video.playsInline = true;
+            void video.play().catch(() => undefined);
+        }
+        if (audio) {
+            audio.muted = false;
+            void audio.play().catch(() => undefined);
+        }
         setLoading(true);
         setError(null);
         try {
@@ -147,8 +158,6 @@ export const useStation = () => {
             appendLog(
                 `launch 200 game=${GAME_ID} pads=${inputNeeds.gamepad} keyboard=${inputNeeds.keyboard} mouse=${inputNeeds.mouse}`,
             );
-            const video = videoRef.current;
-            const audio = audioRef.current;
             if (!video) throw new Error('No hay elemento de video');
             if (!audio) throw new Error('No hay elemento de audio');
             closePeer();
@@ -158,15 +167,8 @@ export const useStation = () => {
             (document.activeElement as HTMLElement | null)?.blur();
             video.focus();
             audio.muted = false;
-            void video.play().catch(() => {
-                video.muted = true;
-                void video.play().catch(() => {
-                    /* gesto de Jugar: desbloquea autoplay en Safari/HTTP */
-                });
-            });
-            void audio.play().catch(() => {
-                audio.muted = true;
-            });
+            void video.play().catch(() => undefined);
+            void audio.play().catch(() => undefined);
             peerCleanupRef.current = attachWebrtc({
                 signalPath: launched.wsUrl || '/ws/webrtc',
                 video,

@@ -88,7 +88,7 @@ function inputHint(needs: InputNeeds, padIds: string[], pointerLocked: boolean):
         );
     }
     if (needs.keyboard) parts.push('teclado activo');
-    if (needs.mouse && !pointerLocked) parts.push('mouse sobre el video');
+    if (needs.mouse && !pointerLocked) parts.push('click en el video para la cámara');
     return parts.length ? parts.join(' · ') : null;
 }
 
@@ -121,7 +121,7 @@ export const GameView = ({
     const hideTimer = useRef<number>(0);
     const [controlsOn, setControlsOn] = useState(true);
     const [isFullscreen, setIsFullscreen] = useState(false);
-    const [muted, setMuted] = useState(true);
+    const [muted, setMuted] = useState(false);
 
     const showControls = useCallback((sticky = false) => {
         setControlsOn(true);
@@ -160,26 +160,12 @@ export const GameView = ({
     useEffect(() => {
         const video = videoRef.current;
         const audio = audioRef.current;
-        if (!hasTrack || !video) {
-            setMuted(true);
-            return;
-        }
+        if (!hasTrack || !video) return;
         video.muted = false;
         if (audio) audio.muted = false;
-        void video.play().then(
-            () => setMuted(false),
-            () => {
-                video.muted = true;
-                if (audio) audio.muted = true;
-                setMuted(true);
-            },
-        );
-        if (audio) {
-            void audio.play().catch(() => {
-                audio.muted = true;
-                setMuted(true);
-            });
-        }
+        setMuted(false);
+        void video.play().catch(() => undefined);
+        if (audio) void audio.play().catch(() => undefined);
     }, [hasTrack, videoRef, audioRef]);
 
     const unmute = () => {
@@ -224,6 +210,13 @@ export const GameView = ({
         void video.requestPointerLock();
     };
 
+    const capturePointer = (event: MouseEvent) => {
+        event.stopPropagation();
+        const video = videoRef.current;
+        if (!video || pointerLocked) return;
+        void video.requestPointerLock();
+    };
+
     const hint = hasTrack ? inputHint(needs, padIds, pointerLocked) : null;
     const classes = [
         'game-view',
@@ -257,24 +250,12 @@ export const GameView = ({
                 controls={false}
                 width={1280}
                 height={720}
-                onClick={needs.mouse ? undefined : unmute}
+                onClick={needs.mouse ? capturePointer : unmute}
                 onDoubleClick={needs.mouse ? undefined : toggleFullscreen}
             />
             <audio ref={audioRef} autoPlay />
             {!hasTrack && (
                 <div className="game-view__placeholder">pantalla de juego</div>
-            )}
-            {hasTrack && muted && (
-                <button
-                    type="button"
-                    className="game-view__unmute"
-                    onClick={(event) => {
-                        event.stopPropagation();
-                        unmute();
-                    }}
-                >
-                    activar audio
-                </button>
             )}
             {hasTrack && <RtcStatsOverlay stats={stats ?? null} />}
             {hint && <p className="game-view__hint">{hint}</p>}
