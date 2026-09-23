@@ -36,12 +36,12 @@ export function startInput(opts: {
     let stopped = false;
     const history: WireSnapshot[] = [];
     const frames = attachFrameClock(opts.video);
-    const runtime = { pulse: (_force = false) => undefined as void };
+    const runtime = { pulse: () => undefined as void };
 
     const keyboard = needs.keyboard
         ? attachKeyboard({
             onKeys: opts.onKeys,
-            onChange: () => runtime.pulse(true),
+            onChange: () => runtime.pulse(),
             onLog: opts.onLog,
         })
         : null;
@@ -51,7 +51,7 @@ export function startInput(opts: {
             captureLook: Boolean(needs.relativeMouse),
             onMouse: opts.onMouse,
             onLock: opts.onLock,
-            onChange: () => runtime.pulse(true),
+            onChange: () => runtime.pulse(),
             onLog: opts.onLog,
         })
         : null;
@@ -102,16 +102,15 @@ export function startInput(opts: {
         history.push(item);
     };
 
-    const tick = (force = false) => {
+    const tick = () => {
         if (stopped || channel.readyState !== 'open') return;
         push(sample());
-        if (!force && channel.bufferedAmount > 0) return;
         if (sendDatagram(channel, encodeDatagram(history))) {
             for (const snap of history) snap.tx = true;
         }
     };
 
-    runtime.pulse = tick;
+    runtime.pulse = () => tick();
 
     const rest = (): Snapshot => {
         seq = (seq + 1) & 0xffff;
@@ -131,8 +130,8 @@ export function startInput(opts: {
         }
     };
 
-    tick(true);
-    const timer = window.setInterval(() => tick(false), TICK_MS);
+    tick();
+    const timer = window.setInterval(tick, TICK_MS);
     channel.addEventListener('bufferedamountlow', onLow);
 
     return () => {

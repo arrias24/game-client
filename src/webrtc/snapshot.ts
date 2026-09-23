@@ -102,9 +102,12 @@ function writeSnapshot(view: DataView, off: number, snap: Snapshot): number {
     return off;
 }
 
+/** Unreliable input: preferir el snapshot más nuevo aunque el buffer no esté vacío. */
+const MAX_BUFFERED = 64 * 1024;
+
 export function sendDatagram(channel: RTCDataChannel | null, buf: ArrayBuffer): boolean {
     if (!channel || channel.readyState !== 'open') return false;
-    if (channel.bufferedAmount > 0) return false;
+    if (channel.bufferedAmount > MAX_BUFFERED) return false;
     try {
         channel.send(buf);
         return true;
