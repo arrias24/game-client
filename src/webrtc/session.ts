@@ -130,7 +130,9 @@ export function attachWebrtc(opts: {
             needs,
             onPads: (ids) => {
                 opts.onLog(
-                    ids.length ? `gamepad ${ids.join(' · ')}` : 'gamepad desconectado',
+                    ids.length
+                        ? `gamepad ×${ids.length} ${ids.join(' · ')}`
+                        : 'gamepad desconectado',
                 );
                 opts.onPads?.(ids);
             },

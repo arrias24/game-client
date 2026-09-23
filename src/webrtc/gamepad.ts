@@ -57,16 +57,20 @@ function stickPair(x: number, y: number): [number, number] {
     return [clamp1(x * s), clamp1(y * s)];
 }
 
+function padKey(pad: Gamepad): string {
+    const id = pad.id.trim() || 'gamepad';
+    return `${pad.index}:${id}`;
+}
+
 function listPads(maxPads: number): Gamepad[] {
     const raw = [...navigator.getGamepads()].filter((pad): pad is Gamepad => pad != null);
     const standard = raw.filter((pad) => pad.mapping === 'standard');
     const pool = (standard.length ? standard : raw).sort((a, b) => a.index - b.index);
-    const seen = new Set<string>();
+    const seen = new Set<number>();
     const unique: Gamepad[] = [];
     for (const pad of pool) {
-        const key = pad.id || `idx-${pad.index}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
+        if (seen.has(pad.index)) continue;
+        seen.add(pad.index);
         unique.push(pad);
         if (unique.length >= maxPads) break;
     }
@@ -103,8 +107,9 @@ export function attachGamepad(opts: {
                 }
                 continue;
             }
-            if (ids[slot] !== pad.id) {
-                ids[slot] = pad.id;
+            const label = padKey(pad);
+            if (ids[slot] !== label) {
+                ids[slot] = label;
                 roster = true;
             }
             let buttons = 0;
