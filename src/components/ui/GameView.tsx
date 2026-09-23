@@ -201,20 +201,24 @@ export const GameView = ({
 
     const togglePointerLock = (event: MouseEvent) => {
         event.stopPropagation();
+        const container = containerRef.current;
         const video = videoRef.current;
-        if (!video) return;
+        if (!container && !video) return;
         if (pointerLocked) {
             document.exitPointerLock();
             return;
         }
-        void video.requestPointerLock({ unadjustedMovement: true });
+        const target = container ?? video!;
+        void target.requestPointerLock({ unadjustedMovement: true });
     };
 
     const capturePointer = (event: MouseEvent) => {
         event.stopPropagation();
+        const container = containerRef.current;
         const video = videoRef.current;
-        if (!video || pointerLocked) return;
-        void video.requestPointerLock({ unadjustedMovement: true });
+        if ((!container && !video) || pointerLocked) return;
+        const target = container ?? video!;
+        void target.requestPointerLock({ unadjustedMovement: true });
     };
 
     const hint = hasTrack ? inputHint(needs, padIds, pointerLocked) : null;
