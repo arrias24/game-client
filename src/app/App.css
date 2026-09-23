@@ -74,10 +74,6 @@
     overflow: hidden;
 }
 
-.game-view.has-stream-aspect {
-    aspect-ratio: calc(var(--stream-w) / var(--stream-h));
-}
-
 .game-view > audio {
     display: none;
 }
@@ -94,11 +90,6 @@
         aspect-ratio: auto;
     }
 
-    .game-view.has-stream-aspect {
-        width: min(100cqw, calc(100cqh * var(--stream-w) / var(--stream-h)));
-        height: min(100cqh, calc(100cqw * var(--stream-h) / var(--stream-w)));
-        aspect-ratio: auto;
-    }
 }
 
 .game-view video {
@@ -108,7 +99,7 @@
     display: block;
     width: 100%;
     height: 100%;
-    object-fit: fill;
+    object-fit: contain;
     background: #000;
     cursor: pointer;
     z-index: 0;

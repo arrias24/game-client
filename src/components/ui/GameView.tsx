@@ -122,7 +122,6 @@ export const GameView = ({
     const [controlsOn, setControlsOn] = useState(true);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [muted, setMuted] = useState(false);
-    const [streamSize, setStreamSize] = useState<{ w: number; h: number } | null>(null);
 
     const showControls = useCallback((sticky = false) => {
         setControlsOn(true);
@@ -168,26 +167,6 @@ export const GameView = ({
         void video.play().catch(() => undefined);
         if (audio) void audio.play().catch(() => undefined);
     }, [hasTrack, videoRef, audioRef]);
-
-    useEffect(() => {
-        const video = videoRef.current;
-        if (!hasTrack || !video) {
-            setStreamSize(null);
-            return;
-        }
-        const syncAspect = () => {
-            const w = video.videoWidth;
-            const h = video.videoHeight;
-            if (w > 0 && h > 0) setStreamSize({ w, h });
-        };
-        syncAspect();
-        video.addEventListener('loadedmetadata', syncAspect);
-        video.addEventListener('resize', syncAspect);
-        return () => {
-            video.removeEventListener('loadedmetadata', syncAspect);
-            video.removeEventListener('resize', syncAspect);
-        };
-    }, [hasTrack, videoRef]);
 
     const unmute = () => {
         const video = videoRef.current;
@@ -236,7 +215,6 @@ export const GameView = ({
     const hint = hasTrack ? inputHint(needs, padIds, pointerLocked) : null;
     const classes = [
         'game-view',
-        streamSize ? 'has-stream-aspect' : '',
         controlsOn ? 'is-controls' : 'is-idle',
         hasTrack ? 'has-track' : '',
         needs.mouse ? 'has-mouse' : '',
@@ -247,14 +225,6 @@ export const GameView = ({
         <div
             ref={containerRef}
             className={classes}
-            style={
-                streamSize
-                    ? ({
-                        ['--stream-w' as string]: String(streamSize.w),
-                        ['--stream-h' as string]: String(streamSize.h),
-                    } as React.CSSProperties)
-                    : undefined
-            }
             tabIndex={0}
             onMouseMove={() => showControls()}
             onPointerDown={() => showControls()}
@@ -273,6 +243,8 @@ export const GameView = ({
                 playsInline
                 muted={muted}
                 controls={false}
+                width={1280}
+                height={720}
                 onClick={unmute}
                 onDoubleClick={needs.mouse ? undefined : toggleFullscreen}
             />
