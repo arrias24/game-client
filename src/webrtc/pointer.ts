@@ -47,6 +47,21 @@ function isOnVideo(video: HTMLVideoElement, target: EventTarget | null): boolean
     return target === video || (target instanceof Node && video.contains(target));
 }
 
+const POINTER_LOCK: PointerLockOptions = { unadjustedMovement: true };
+
+function requestPointerLockOn(target: Element) {
+    if (target.requestPointerLock) {
+        return target.requestPointerLock(POINTER_LOCK);
+    }
+    const legacy = target as Element & {
+        mozRequestPointerLock?: () => void;
+        webkitRequestPointerLock?: () => void;
+    };
+    legacy.mozRequestPointerLock?.();
+    legacy.webkitRequestPointerLock?.();
+    return Promise.resolve();
+}
+
 export function attachPointer(opts: {
     video: HTMLVideoElement;
     /** Juegos con look SDL (Xonotic): pedir pointer lock al apretar en el video. */
@@ -60,6 +75,8 @@ export function attachPointer(opts: {
     let locked = false;
     let lastHud = 0;
     let lastPt = { x: 0, y: 0 };
+    /** Última posición ya enviada en modo look relativo sin pointer lock. */
+    let sentPt = { x: 0, y: 0 };
     let dx = 0;
     let dy = 0;
     let wheel = 0;
@@ -75,9 +92,10 @@ export function attachPointer(opts: {
         const now = performance.now();
         if (!force && now - lastHud < 50) return;
         lastHud = now;
+        const lookRel = opts.captureLook && !locked;
         opts.onMouse?.({
-            x: locked ? dx : lastPt.x,
-            y: locked ? dy : lastPt.y,
+            x: locked ? dx : lookRel ? lastPt.x - sentPt.x : lastPt.x,
+            y: locked ? dy : lookRel ? lastPt.y - sentPt.y : lastPt.y,
             buttons: held.size,
             locked,
         });
@@ -91,16 +109,7 @@ export function attachPointer(opts: {
             const msg = err instanceof Error ? err.message : String(err);
             opts.onLog?.(`pointer lock falló: ${msg} (click de nuevo en el video)`);
         };
-        if (target.requestPointerLock) {
-            void target.requestPointerLock().then(done).catch(fail);
-            return;
-        }
-        const legacy = target as HTMLVideoElement & {
-            mozRequestPointerLock?: () => void;
-            webkitRequestPointerLock?: () => void;
-        };
-        legacy.mozRequestPointerLock?.();
-        legacy.webkitRequestPointerLock?.();
+        void requestPointerLockOn(target).then(done).catch(fail);
     };
 
     const onLockedMove = (ev: Event) => {
@@ -139,6 +148,9 @@ export function attachPointer(opts: {
             held.clear();
             dx = 0;
             dy = 0;
+            sentPt = { ...lastPt };
+        } else {
+            sentPt = { ...lastPt };
         }
         emitHud(true);
         opts.onChange?.();
@@ -149,7 +161,12 @@ export function attachPointer(opts: {
         opts.video.focus();
         held.add(ev.button);
         const pt = mapVideoCoords(opts.video, ev.clientX, ev.clientY);
-        if (pt) lastPt = pt;
+        if (pt) {
+            lastPt = pt;
+            if (opts.captureLook && !locked) {
+                sentPt = { ...pt };
+            }
+        }
         if (
             opts.captureLook
             && ev.button === 0
@@ -224,6 +241,26 @@ export function attachPointer(opts: {
 
     return {
         peek: (): MouseSample => {
+            if (opts.captureLook) {
+                if (locked) {
+                    return {
+                        abs: false,
+                        x: Math.round(dx),
+                        y: Math.round(dy),
+                        buttons: buttonMask(),
+                        wheel: wheel | 0,
+                        locked,
+                    };
+                }
+                return {
+                    abs: false,
+                    x: lastPt.x - sentPt.x,
+                    y: lastPt.y - sentPt.y,
+                    buttons: buttonMask(),
+                    wheel: wheel | 0,
+                    locked,
+                };
+            }
             if (locked) {
                 return {
                     abs: false,
@@ -244,7 +281,16 @@ export function attachPointer(opts: {
             };
         },
         consumeMotion: () => {
-            if (locked) {
+            if (opts.captureLook) {
+                if (locked) {
+                    const ix = Math.max(-32767, Math.min(32767, Math.round(dx)));
+                    const iy = Math.max(-32767, Math.min(32767, Math.round(dy)));
+                    dx -= ix;
+                    dy -= iy;
+                } else {
+                    sentPt = { ...lastPt };
+                }
+            } else if (locked) {
                 const ix = Math.max(-32767, Math.min(32767, Math.round(dx)));
                 const iy = Math.max(-32767, Math.min(32767, Math.round(dy)));
                 dx -= ix;
@@ -272,6 +318,7 @@ export function attachPointer(opts: {
             dx = 0;
             dy = 0;
             wheel = 0;
+            sentPt = { x: 0, y: 0 };
             opts.onLock?.(false);
             opts.onMouse?.(null);
         },

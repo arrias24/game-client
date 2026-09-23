@@ -207,14 +207,14 @@ export const GameView = ({
             document.exitPointerLock();
             return;
         }
-        void video.requestPointerLock();
+        void video.requestPointerLock({ unadjustedMovement: true });
     };
 
     const capturePointer = (event: MouseEvent) => {
         event.stopPropagation();
         const video = videoRef.current;
         if (!video || pointerLocked) return;
-        void video.requestPointerLock();
+        void video.requestPointerLock({ unadjustedMovement: true });
     };
 
     const hint = hasTrack ? inputHint(needs, padIds, pointerLocked) : null;
